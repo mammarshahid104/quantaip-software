@@ -383,6 +383,145 @@ p {
   background: rgba(184, 150, 10, 0.14);
   color: var(--gold);
 }
+.badge-danger {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+.badge-red {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+/* Horizontal progress bars (analytics) */
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.bar-label {
+  width: 120px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--cream);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.bar-green {
+  background: #10b981;
+}
+.bar-amber {
+  background: var(--gold);
+}
+.bar-red {
+  background: #dc2626;
+}
+.bar-value {
+  width: 46px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+/* Homework cards */
+.hw-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hw-card {
+  background: var(--white);
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+.hw-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.hw-subject {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.hw-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: 4px;
+}
+.hw-desc {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.hw-meta {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hw-meta strong {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+/* Break row in timetable */
+.row-break td {
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+  font-weight: 600;
+}
+
+/* Class selector chips */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.chip {
+  background: var(--white);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.chip:hover {
+  border-color: var(--gold);
+}
+.chip-active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--gold-bright);
+}
 
 /* Table empty / loading state */
 .table-state {
