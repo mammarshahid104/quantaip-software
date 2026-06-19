@@ -680,6 +680,60 @@ p {
   font-weight: 600;
 }
 
+/* Timetable editor inputs */
+.tt-input {
+  width: 100%;
+  background: var(--white);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  font-family: inherit;
+}
+.tt-input:focus {
+  border-color: var(--gold);
+}
+.tt-input:disabled {
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--muted);
+}
+.tt-num {
+  width: 60px;
+}
+.tt-time {
+  width: 120px;
+}
+.btn-icon-del {
+  background: transparent;
+  border: 1px solid #dc2626;
+  color: #dc2626;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.btn-icon-del:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+.editor-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Class selector chips */
 .chip-row {
   display: flex;
