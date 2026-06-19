@@ -1,9 +1,11 @@
-// Add Student modal — writes to schools/{schoolCode}/students
+// Add / Edit Student modal — writes to schools/{schoolCode}/students
+// Pass a `student` prop ({ id, ...data }) to open in edit mode.
 import { useMemo, useState } from "react";
 import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   getCountFromServer,
   serverTimestamp,
 } from "firebase/firestore";
@@ -19,28 +21,35 @@ const SECTIONS = ["A", "B", "C"];
 
 const firstNameOf = (name) => name.trim().split(/\s+/)[0] || "";
 
-export default function AddStudentModal({ schoolCode, onClose, onSuccess }) {
-  // Random 4-digit suffix generated once when the modal opens.
+export default function AddStudentModal({
+  schoolCode,
+  student,
+  onClose,
+  onSuccess,
+}) {
+  const isEdit = !!student;
+
+  // Random 4-digit suffix generated once when the modal opens (add mode only).
   const randomNum = useMemo(
     () => Math.floor(1000 + Math.random() * 9000),
     []
   );
 
   const [form, setForm] = useState({
-    fullName: "",
-    class: "",
-    section: "",
-    rollNo: "",
-    fatherName: "",
-    parentPhone: "",
-    password: "",
+    fullName: student?.fullName || "",
+    class: student?.class || "",
+    section: student?.section || "",
+    rollNo: student?.rollNo || "",
+    fatherName: student?.fatherName || "",
+    parentPhone: student?.parentPhone || "",
+    password: student?.password || "",
   });
-  const [passwordTouched, setPasswordTouched] = useState(false);
+  // In edit mode the password is pre-filled; don't auto-regenerate it.
+  const [passwordTouched, setPasswordTouched] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const update = (key, value) =>
-    setForm((f) => ({ ...f, [key]: value }));
+  const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   // Name drives the auto-generated password until the user edits it.
   const handleNameChange = (value) => {
@@ -74,12 +83,7 @@ export default function AddStudentModal({ schoolCode, onClose, onSuccess }) {
     setSaving(true);
     try {
       const colRef = collection(db, `schools/${schoolCode}/students`);
-      const countSnap = await getCountFromServer(colRef);
-      const next = countSnap.data().count + 1;
-      const padded = String(next).padStart(4, "0");
-      const generatedId = `${schoolCode}-STU-${padded}`;
-
-      await setDoc(doc(colRef, generatedId), {
+      const fields = {
         fullName: form.fullName.trim(),
         class: form.class,
         section: form.section,
@@ -87,22 +91,34 @@ export default function AddStudentModal({ schoolCode, onClose, onSuccess }) {
         fatherName: form.fatherName.trim(),
         parentPhone: form.parentPhone.trim(),
         password: form.password,
-        role: "student",
-        school: schoolCode,
-        status: "active",
-        id: generatedId,
-        parentId: `${schoolCode}-PAR-${padded}`,
-        createdAt: serverTimestamp(),
-      });
+      };
 
-      onSuccess?.("Student added successfully!");
+      if (isEdit) {
+        await updateDoc(doc(colRef, student.id), fields);
+        onSuccess?.("Student updated successfully!");
+      } else {
+        const countSnap = await getCountFromServer(colRef);
+        const next = countSnap.data().count + 1;
+        const padded = String(next).padStart(4, "0");
+        const generatedId = `${schoolCode}-STU-${padded}`;
+        await setDoc(doc(colRef, generatedId), {
+          ...fields,
+          role: "student",
+          school: schoolCode,
+          status: "active",
+          id: generatedId,
+          parentId: `${schoolCode}-PAR-${padded}`,
+          createdAt: serverTimestamp(),
+        });
+        onSuccess?.("Student added successfully!");
+      }
       onClose?.();
     } catch (err) {
-      console.error("Add student failed:", err);
+      console.error("Save student failed:", err);
       setError(
         err.code === "permission-denied"
-          ? "You don't have permission to add students."
-          : "Couldn't add student. Please try again."
+          ? "You don't have permission to save students."
+          : "Couldn't save student. Please try again."
       );
       setSaving(false);
     }
@@ -112,7 +128,9 @@ export default function AddStudentModal({ schoolCode, onClose, onSuccess }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Add Student</span>
+          <span className="modal-title">
+            {isEdit ? "Edit Student" : "Add Student"}
+          </span>
           <button className="modal-close" onClick={onClose} aria-label="Close">
             ✕
           </button>
@@ -224,7 +242,11 @@ export default function AddStudentModal({ schoolCode, onClose, onSuccess }) {
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? "Saving…" : "Save Student"}
+              {saving
+                ? "Saving…"
+                : isEdit
+                ? "Update Student"
+                : "Save Student"}
             </button>
           </div>
         </form>

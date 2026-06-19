@@ -1,9 +1,11 @@
-// Add Teacher modal — writes to schools/{schoolCode}/teachers
+// Add / Edit Teacher modal — writes to schools/{schoolCode}/teachers
+// Pass a `teacher` prop ({ id, ...data }) to open in edit mode.
 import { useMemo, useState } from "react";
 import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   getCountFromServer,
   serverTimestamp,
 } from "firebase/firestore";
@@ -18,25 +20,33 @@ const CLASSES = [
 
 const firstNameOf = (name) => name.trim().split(/\s+/)[0] || "";
 
-export default function AddTeacherModal({ schoolCode, onClose, onSuccess }) {
+export default function AddTeacherModal({
+  schoolCode,
+  teacher,
+  onClose,
+  onSuccess,
+}) {
+  const isEdit = !!teacher;
+
   const randomNum = useMemo(
     () => Math.floor(1000 + Math.random() * 9000),
     []
   );
 
   const [form, setForm] = useState({
-    name: "",
-    subject: "",
-    classesAssigned: [],
-    phone: "",
-    password: "",
+    name: teacher?.name || "",
+    subject: teacher?.subject || "",
+    classesAssigned: Array.isArray(teacher?.classesAssigned)
+      ? teacher.classesAssigned
+      : [],
+    phone: teacher?.phone || "",
+    password: teacher?.password || "",
   });
-  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const update = (key, value) =>
-    setForm((f) => ({ ...f, [key]: value }));
+  const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleNameChange = (value) => {
     setForm((f) => ({
@@ -74,32 +84,39 @@ export default function AddTeacherModal({ schoolCode, onClose, onSuccess }) {
     setSaving(true);
     try {
       const colRef = collection(db, `schools/${schoolCode}/teachers`);
-      const countSnap = await getCountFromServer(colRef);
-      const next = countSnap.data().count + 1;
-      const padded = String(next).padStart(4, "0");
-      const generatedId = `${schoolCode}-TCH-${padded}`;
-
-      await setDoc(doc(colRef, generatedId), {
+      const fields = {
         name: form.name.trim(),
         subject: form.subject.trim(),
         classesAssigned: form.classesAssigned,
         phone: form.phone.trim(),
         password: form.password,
-        role: "teacher",
-        school: schoolCode,
-        status: "active",
-        id: generatedId,
-        createdAt: serverTimestamp(),
-      });
+      };
 
-      onSuccess?.("Teacher added successfully!");
+      if (isEdit) {
+        await updateDoc(doc(colRef, teacher.id), fields);
+        onSuccess?.("Teacher updated successfully!");
+      } else {
+        const countSnap = await getCountFromServer(colRef);
+        const next = countSnap.data().count + 1;
+        const padded = String(next).padStart(4, "0");
+        const generatedId = `${schoolCode}-TCH-${padded}`;
+        await setDoc(doc(colRef, generatedId), {
+          ...fields,
+          role: "teacher",
+          school: schoolCode,
+          status: "active",
+          id: generatedId,
+          createdAt: serverTimestamp(),
+        });
+        onSuccess?.("Teacher added successfully!");
+      }
       onClose?.();
     } catch (err) {
-      console.error("Add teacher failed:", err);
+      console.error("Save teacher failed:", err);
       setError(
         err.code === "permission-denied"
-          ? "You don't have permission to add teachers."
-          : "Couldn't add teacher. Please try again."
+          ? "You don't have permission to save teachers."
+          : "Couldn't save teacher. Please try again."
       );
       setSaving(false);
     }
@@ -109,7 +126,9 @@ export default function AddTeacherModal({ schoolCode, onClose, onSuccess }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Add Teacher</span>
+          <span className="modal-title">
+            {isEdit ? "Edit Teacher" : "Add Teacher"}
+          </span>
           <button className="modal-close" onClick={onClose} aria-label="Close">
             ✕
           </button>
@@ -194,7 +213,11 @@ export default function AddTeacherModal({ schoolCode, onClose, onSuccess }) {
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? "Saving…" : "Save Teacher"}
+              {saving
+                ? "Saving…"
+                : isEdit
+                ? "Update Teacher"
+                : "Save Teacher"}
             </button>
           </div>
         </form>

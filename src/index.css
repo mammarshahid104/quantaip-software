@@ -465,6 +465,86 @@ p {
   cursor: not-allowed;
 }
 
+/* Action buttons in table rows */
+.action-btns {
+  display: flex;
+  gap: 8px;
+}
+.btn-edit {
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.btn-edit:hover {
+  background: rgba(184, 150, 10, 0.1);
+}
+.btn-delete {
+  border: 1px solid #dc2626;
+  color: #dc2626;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.btn-delete:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* Delete confirmation dialog */
+.confirm-card {
+  background: var(--white);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 400px;
+  margin: 16px;
+  padding: 28px 24px;
+  text-align: center;
+}
+.confirm-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+.confirm-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+.confirm-text {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 22px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.btn-danger:hover {
+  background: #b91c1c;
+}
+.btn-danger:disabled,
+.btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Checkbox grid (classes assigned) */
 .checkbox-grid {
   display: grid;

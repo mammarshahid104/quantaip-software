@@ -1,8 +1,9 @@
 // Teachers — searchable / filterable list backed by Firestore
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import AddTeacherModal from "../components/AddTeacherModal";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 function teacherName(d) {
   return d.fullName || d.name || "Unknown";
@@ -17,6 +18,9 @@ export default function Teachers() {
   const [search, setSearch] = useState("");
   const [subject, setSubject] = useState("All Subjects");
   const [showModal, setShowModal] = useState(false);
+  const [editTeacher, setEditTeacher] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [success, setSuccess] = useState("");
 
   const load = useCallback(async () => {
@@ -37,6 +41,7 @@ export default function Teachers() {
             : d.classesAssigned || "—",
           phone: d.phone || d.phoneNumber || d.contact || "—",
           status: (d.status || "active").toLowerCase(),
+          raw: d,
         };
       });
       setTeachers(rows);
@@ -60,6 +65,33 @@ export default function Teachers() {
     setSuccess(message);
     load();
     setTimeout(() => setSuccess(""), 4000);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditTeacher(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(
+        doc(db, `schools/${schoolCode}/teachers/${deleteTarget.id}`)
+      );
+      setDeleteTarget(null);
+      handleSuccess("Teacher deleted successfully!");
+    } catch (err) {
+      console.error("Delete teacher failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have permission to delete teachers."
+          : "Couldn't delete teacher. Please try again."
+      );
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Unique subjects present in the data, for the dropdown.
@@ -176,7 +208,22 @@ export default function Teachers() {
                     </span>
                   </td>
                   <td>
-                    <button className="btn-view">View</button>
+                    <div className="action-btns">
+                      <button
+                        className="btn-edit"
+                        onClick={() =>
+                          setEditTeacher({ id: t.id, ...t.raw })
+                        }
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="btn-delete"
+                        onClick={() => setDeleteTarget(t)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -185,11 +232,22 @@ export default function Teachers() {
         )}
       </div>
 
-      {showModal && (
+      {(showModal || editTeacher) && (
         <AddTeacherModal
           schoolCode={schoolCode}
-          onClose={() => setShowModal(false)}
+          teacher={editTeacher || undefined}
+          onClose={closeModal}
           onSuccess={handleSuccess}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete Teacher"
+          message={`Are you sure you want to delete ${deleteTarget.name}? This cannot be undone.`}
+          loading={deleting}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDelete}
         />
       )}
     </div>
