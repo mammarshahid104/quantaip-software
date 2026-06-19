@@ -6,10 +6,20 @@ import {
   doc,
   setDoc,
   updateDoc,
-  getCountFromServer,
+  getDocs,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
+
+// Next sequential number from the max existing doc ID (delete-safe).
+function nextNumberFrom(docs) {
+  let max = 0;
+  for (const d of docs) {
+    const m = String(d.id).match(/(\d+)\s*$/);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max + 1;
+}
 
 const CLASSES = [
   "Nursery",
@@ -97,8 +107,8 @@ export default function AddStudentModal({
         await updateDoc(doc(colRef, student.id), fields);
         onSuccess?.("Student updated successfully!");
       } else {
-        const countSnap = await getCountFromServer(colRef);
-        const next = countSnap.data().count + 1;
+        const snap = await getDocs(colRef);
+        const next = nextNumberFrom(snap.docs);
         const padded = String(next).padStart(4, "0");
         const generatedId = `${schoolCode}-STU-${padded}`;
         await setDoc(doc(colRef, generatedId), {
