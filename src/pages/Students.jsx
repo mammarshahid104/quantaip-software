@@ -1,0 +1,188 @@
+// Students — searchable / filterable roster backed by Firestore
+import { useEffect, useMemo, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase/config";
+
+function studentName(d) {
+  return d.fullName || "Unknown";
+}
+
+// Natural sort for grade labels like "Grade 5" ... "Grade 12".
+function gradeSort(a, b) {
+  const na = parseInt(String(a).replace(/\D/g, ""), 10);
+  const nb = parseInt(String(b).replace(/\D/g, ""), 10);
+  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+  return String(a).localeCompare(String(b));
+}
+
+export default function Students() {
+  const schoolCode = localStorage.getItem("schoolCode") || "your school";
+
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [grade, setGrade] = useState("All Grades");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const snap = await getDocs(
+          collection(db, `schools/${schoolCode}/students`)
+        );
+        const rows = snap.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            rollNo: d.rollNo || "—",
+            name: studentName(d),
+            grade: d["class"] || "—",
+            section: d.section || "—",
+            status: (d.status || "active").toLowerCase(),
+          };
+        });
+        if (!cancelled) setStudents(rows);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Students load failed:", err);
+        setError(
+          err.code === "permission-denied"
+            ? "You don't have access to this school's students."
+            : "Couldn't load students. Please try again."
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolCode]);
+
+  // Unique grades present in the data, for the dropdown.
+  const grades = useMemo(() => {
+    const set = new Set(
+      students.map((s) => s.grade).filter((g) => g && g !== "—")
+    );
+    return ["All Grades", ...Array.from(set).sort(gradeSort)];
+  }, [students]);
+
+  // Apply search + grade filter.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return students.filter((s) => {
+      const matchesSearch = !q || s.name.toLowerCase().includes(q);
+      const matchesGrade = grade === "All Grades" || s.grade === grade;
+      return matchesSearch && matchesGrade;
+    });
+  }, [students, search, grade]);
+
+  return (
+    <div className="page">
+      {/* Header */}
+      <div className="page-head page-head-row">
+        <div>
+          <h1 className="page-title">Students</h1>
+          <p className="page-subtitle">
+            Roster for <strong>{schoolCode}</strong>
+          </p>
+        </div>
+        <button className="btn-primary">+ Add Student</button>
+      </div>
+
+      {error && <div className="login-error">{error}</div>}
+
+      {/* Toolbar: search + grade filter */}
+      <div className="toolbar">
+        <div className="search-box">
+          <span className="search-icon">🔍</span>
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search students by name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <select
+          className="filter-select"
+          value={grade}
+          onChange={(e) => setGrade(e.target.value)}
+        >
+          {grades.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Stats row */}
+      <div className="stats-row">
+        <span>
+          Total: <strong>{students.length}</strong>
+        </span>
+        <span className="stats-sep">·</span>
+        <span>
+          Showing: <strong>{filtered.length}</strong>
+        </span>
+      </div>
+
+      {/* Table */}
+      <div className="card">
+        {loading ? (
+          <div className="table-state">
+            <div className="route-loading-spinner" />
+            <span>Loading students…</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="table-state">No students found</div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Roll No</th>
+                <th>Name</th>
+                <th>Grade</th>
+                <th>Section</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => (
+                <tr key={s.id}>
+                  <td className="cell-muted">{s.id}</td>
+                  <td>{s.rollNo}</td>
+                  <td className="cell-strong">{s.name}</td>
+                  <td>{s.grade}</td>
+                  <td>{s.section}</td>
+                  <td>
+                    <span
+                      className={
+                        "badge " +
+                        (s.status === "active" ? "badge-ok" : "badge-warn")
+                      }
+                    >
+                      {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn-view">View</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
