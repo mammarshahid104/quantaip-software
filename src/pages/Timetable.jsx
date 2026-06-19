@@ -80,18 +80,21 @@ function toRow(p, index) {
     startTime = (a || "").trim();
     endTime = (b || "").trim();
   }
+  const isAssembly = p.isAssembly === true || p.type === "assembly";
   const isBreak =
-    p.isBreak === true ||
-    p.break === true ||
-    p.type === "break" ||
-    String(p.subject || "").toLowerCase() === "break";
+    !isAssembly &&
+    (p.isBreak === true ||
+      p.break === true ||
+      p.type === "break" ||
+      String(p.subject || "").toLowerCase() === "break");
   return {
     periodNo: p.period ?? p.periodNo ?? p.no ?? index + 1,
     startTime,
     endTime,
-    subject: isBreak ? "Break" : p.subject || "",
+    subject: isBreak ? "Break" : p.subject || (isAssembly ? "Assembly" : ""),
     teacher: isBreak ? "" : p.teacher || p.teacherName || "",
     isBreak,
+    isAssembly,
   };
 }
 
@@ -106,6 +109,7 @@ const emptyRow = (n) => ({
   subject: "",
   teacher: "",
   isBreak: false,
+  isAssembly: false,
 });
 
 // Add minutes to a "HH:MM" string, returning "HH:MM" (24h).
@@ -164,6 +168,18 @@ export default function Timetable() {
     breakAfter: 3,
     breakDuration: 30,
     periods: 7,
+    assembly: false,
+    assemblyLabel: "Assembly",
+    assemblyDuration: 15,
+  });
+
+  // Load-template options dialog.
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [tpl, setTpl] = useState({
+    assembly: false,
+    label: "Assembly",
+    duration: 15,
+    startTime: "07:45",
   });
 
   useEffect(() => {
@@ -277,7 +293,13 @@ export default function Timetable() {
       const copy = { ...prev };
       const arr = [...copy[fullDay]];
       arr[index] = checked
-        ? { ...arr[index], isBreak: true, subject: "Break", teacher: "" }
+        ? {
+            ...arr[index],
+            isBreak: true,
+            isAssembly: false,
+            subject: "Break",
+            teacher: "",
+          }
         : { ...arr[index], isBreak: false, subject: "" };
       copy[fullDay] = arr;
       return copy;
@@ -329,16 +351,37 @@ export default function Timetable() {
     });
   };
 
-  // Automation 1: load the standard / Friday template for the current day.
-  const loadTemplate = () => {
+  // Build an assembly row (period 0, before regular periods).
+  const assemblyRow = (label, startTime, endTime) => ({
+    periodNo: 0,
+    startTime,
+    endTime,
+    subject: label || "Assembly",
+    teacher: "",
+    isBreak: false,
+    isAssembly: true,
+  });
+
+  // Automation 1: open the template options dialog.
+  const loadTemplate = () => setTemplateOpen(true);
+
+  const applyTemplate = () => {
     const existing = draft?.[fullDay] || [];
     if (
       existing.length > 0 &&
       !window.confirm("This will replace existing periods. Continue?")
     )
       return;
-    const template = fullDay === "Friday" ? FRI_TEMPLATE : STD_TEMPLATE;
-    setDraft((prev) => ({ ...prev, [fullDay]: cloneRows(template) }));
+
+    const base = fullDay === "Friday" ? FRI_TEMPLATE : STD_TEMPLATE;
+    let rows = cloneRows(base);
+    if (tpl.assembly) {
+      const dur = Number(tpl.duration) || 15;
+      const start = tpl.startTime || "07:45";
+      rows = [assemblyRow(tpl.label, start, addMinutes(start, dur)), ...rows];
+    }
+    setDraft((prev) => ({ ...prev, [fullDay]: rows }));
+    setTemplateOpen(false);
   };
 
   // Automation 2: generate periods from start time / duration / break config.
@@ -356,6 +399,14 @@ export default function Timetable() {
     const periods = Number(gen.periods) || 0;
     let cursor = gen.startTime || "08:00";
     const rows = [];
+
+    // Optional assembly before regular periods.
+    if (gen.assembly) {
+      const aDur = Number(gen.assemblyDuration) || 15;
+      rows.push(
+        assemblyRow(gen.assemblyLabel, addMinutes(cursor, -aDur), cursor)
+      );
+    }
 
     for (let i = 1; i <= periods; i++) {
       const end = addMinutes(cursor, duration);
@@ -399,6 +450,7 @@ export default function Timetable() {
           subject: r.isBreak ? "Break" : r.subject || "",
           teacher: r.isBreak ? "" : r.teacher || "",
           isBreak: !!r.isBreak,
+          isAssembly: !!r.isAssembly,
         }));
       }
       await setDoc(
@@ -566,6 +618,50 @@ export default function Timetable() {
                     }
                   />
                 </label>
+                <label className="gen-field">
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={gen.assembly}
+                      onChange={(e) =>
+                        setGen((g) => ({ ...g, assembly: e.target.checked }))
+                      }
+                    />
+                    Zero Period / Assembly
+                  </span>
+                </label>
+                {gen.assembly && (
+                  <>
+                    <label className="gen-field">
+                      Assembly label
+                      <input
+                        className="tt-input"
+                        type="text"
+                        value={gen.assemblyLabel}
+                        onChange={(e) =>
+                          setGen((g) => ({
+                            ...g,
+                            assemblyLabel: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="gen-field">
+                      Assembly duration (min)
+                      <input
+                        className="tt-input"
+                        type="number"
+                        value={gen.assemblyDuration}
+                        onChange={(e) =>
+                          setGen((g) => ({
+                            ...g,
+                            assemblyDuration: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </>
+                )}
                 <button className="btn-primary" onClick={generatePeriods}>
                   Generate ✓
                 </button>
@@ -597,7 +693,16 @@ export default function Timetable() {
             <tbody>
               {viewRows.map((p, i) =>
                 editMode ? (
-                  <tr key={i} className={p.isBreak ? "row-break" : ""}>
+                  <tr
+                    key={i}
+                    className={
+                      p.isBreak
+                        ? "row-break"
+                        : p.isAssembly
+                        ? "row-assembly"
+                        : ""
+                    }
+                  >
                     <td>
                       <input
                         className="tt-input tt-num"
@@ -629,27 +734,39 @@ export default function Timetable() {
                       />
                     </td>
                     <td>
-                      <select
-                        className="tt-input"
-                        value={p.subject}
-                        disabled={p.isBreak}
-                        onChange={(e) =>
-                          handleSubjectChange(i, e.target.value)
-                        }
-                      >
-                        <option value="">— Subject —</option>
-                        {subjects.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                        {/* Preserve a subject not in the current list */}
-                        {p.subject &&
-                          p.subject !== "Break" &&
-                          !subjects.includes(p.subject) && (
-                            <option value={p.subject}>{p.subject}</option>
-                          )}
-                      </select>
+                      {p.isAssembly ? (
+                        <input
+                          className="tt-input"
+                          type="text"
+                          value={p.subject}
+                          placeholder="Assembly label"
+                          onChange={(e) =>
+                            updateRow(i, "subject", e.target.value)
+                          }
+                        />
+                      ) : (
+                        <select
+                          className="tt-input"
+                          value={p.subject}
+                          disabled={p.isBreak}
+                          onChange={(e) =>
+                            handleSubjectChange(i, e.target.value)
+                          }
+                        >
+                          <option value="">— Subject —</option>
+                          {subjects.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                          {/* Preserve a subject not in the current list */}
+                          {p.subject &&
+                            p.subject !== "Break" &&
+                            !subjects.includes(p.subject) && (
+                              <option value={p.subject}>{p.subject}</option>
+                            )}
+                        </select>
+                      )}
                     </td>
                     <td>
                       <select
@@ -690,7 +807,16 @@ export default function Timetable() {
                     </td>
                   </tr>
                 ) : (
-                  <tr key={i} className={p.isBreak ? "row-break" : ""}>
+                  <tr
+                    key={i}
+                    className={
+                      p.isBreak
+                        ? "row-break"
+                        : p.isAssembly
+                        ? "row-assembly"
+                        : ""
+                    }
+                  >
                     <td className="cell-muted">
                       {p.isBreak ? "—" : p.periodNo}
                     </td>
@@ -699,7 +825,7 @@ export default function Timetable() {
                         ? `${p.startTime} - ${p.endTime}`
                         : p.startTime || "—"}
                     </td>
-                    <td className={p.isBreak ? "" : "cell-strong"}>
+                    <td className={p.isBreak || p.isAssembly ? "" : "cell-strong"}>
                       {p.subject || "—"}
                     </td>
                     <td>{p.isBreak ? "—" : p.teacher || "—"}</td>
@@ -722,6 +848,94 @@ export default function Timetable() {
           </div>
         )}
       </div>
+
+      {/* Load Template options dialog */}
+      {templateOpen && (
+        <div className="modal-overlay" onClick={() => setTemplateOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">
+                Load Template — {fullDay}
+              </span>
+              <button
+                className="modal-close"
+                onClick={() => setTemplateOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="page-subtitle" style={{ marginBottom: 16 }}>
+                {fullDay === "Friday"
+                  ? "Loads the short Friday (Jummah) schedule."
+                  : "Loads the standard full-day schedule."}
+              </p>
+
+              <label className="checkbox-item" style={{ marginBottom: 14 }}>
+                <input
+                  type="checkbox"
+                  checked={tpl.assembly}
+                  onChange={(e) =>
+                    setTpl((t) => ({ ...t, assembly: e.target.checked }))
+                  }
+                />
+                Add Zero Period / Assembly before regular periods
+              </label>
+
+              {tpl.assembly && (
+                <>
+                  <label className="field">
+                    <span className="field-label">Label</span>
+                    <input
+                      className="field-input"
+                      type="text"
+                      value={tpl.label}
+                      placeholder="e.g. Assembly, Quran Recitation"
+                      onChange={(e) =>
+                        setTpl((t) => ({ ...t, label: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Start time</span>
+                    <input
+                      className="field-input"
+                      type="time"
+                      value={tpl.startTime}
+                      onChange={(e) =>
+                        setTpl((t) => ({ ...t, startTime: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Duration (minutes)</span>
+                    <input
+                      className="field-input"
+                      type="number"
+                      value={tpl.duration}
+                      onChange={(e) =>
+                        setTpl((t) => ({ ...t, duration: e.target.value }))
+                      }
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn-cancel"
+                onClick={() => setTemplateOpen(false)}
+              >
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={applyTemplate}>
+                Apply Template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

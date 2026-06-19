@@ -680,6 +680,13 @@ p {
   font-weight: 600;
 }
 
+/* Assembly / Zero Period row in timetable */
+.row-assembly td {
+  background: rgba(99, 102, 241, 0.08);
+  color: #4338ca;
+  font-weight: 600;
+}
+
 /* Timetable editor inputs */
 .tt-input {
   width: 100%;
