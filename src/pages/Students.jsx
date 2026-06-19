@@ -1,7 +1,8 @@
 // Students — searchable / filterable roster backed by Firestore
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import AddStudentModal from "../components/AddStudentModal";
 
 function studentName(d) {
   return d.fullName || "Unknown";
@@ -23,47 +24,49 @@ export default function Students() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [grade, setGrade] = useState("All Grades");
+  const [showModal, setShowModal] = useState(false);
+  const [success, setSuccess] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const snap = await getDocs(
+        collection(db, `schools/${schoolCode}/students`)
+      );
+      const rows = snap.docs.map((doc) => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          rollNo: d.rollNo || "—",
+          name: studentName(d),
+          grade: d["class"] || "—",
+          section: d.section || "—",
+          status: (d.status || "active").toLowerCase(),
+        };
+      });
+      setStudents(rows);
+    } catch (err) {
+      console.error("Students load failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have access to this school's students."
+          : "Couldn't load students. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolCode]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const snap = await getDocs(
-          collection(db, `schools/${schoolCode}/students`)
-        );
-        const rows = snap.docs.map((doc) => {
-          const d = doc.data();
-          return {
-            id: doc.id,
-            rollNo: d.rollNo || "—",
-            name: studentName(d),
-            grade: d["class"] || "—",
-            section: d.section || "—",
-            status: (d.status || "active").toLowerCase(),
-          };
-        });
-        if (!cancelled) setStudents(rows);
-      } catch (err) {
-        if (cancelled) return;
-        console.error("Students load failed:", err);
-        setError(
-          err.code === "permission-denied"
-            ? "You don't have access to this school's students."
-            : "Couldn't load students. Please try again."
-        );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [schoolCode]);
+  }, [load]);
+
+  const handleSuccess = (message) => {
+    setSuccess(message);
+    load();
+    setTimeout(() => setSuccess(""), 4000);
+  };
 
   // Unique grades present in the data, for the dropdown.
   const grades = useMemo(() => {
@@ -93,9 +96,12 @@ export default function Students() {
             Roster for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary">+ Add Student</button>
+        <button className="btn-primary" onClick={() => setShowModal(true)}>
+          + Add Student
+        </button>
       </div>
 
+      {success && <div className="success-banner">{success}</div>}
       {error && <div className="login-error">{error}</div>}
 
       {/* Toolbar: search + grade filter */}
@@ -183,6 +189,14 @@ export default function Students() {
           </table>
         )}
       </div>
+
+      {showModal && (
+        <AddStudentModal
+          schoolCode={schoolCode}
+          onClose={() => setShowModal(false)}
+          onSuccess={handleSuccess}
+        />
+      )}
     </div>
   );
 }

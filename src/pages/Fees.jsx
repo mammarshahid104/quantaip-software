@@ -37,30 +37,6 @@ export default function Fees() {
           collection(db, `schools/${schoolCode}/students`)
         );
 
-        if (snap.docs.length > 0) {
-          const sample = snap.docs[0].data();
-          console.log("Student doc — ALL keys:", Object.keys(sample));
-          console.log("Student doc — full data:", sample);
-          // Highlight any key that mentions fee/paid/amount/due.
-          const feeKeys = Object.keys(sample).filter((k) =>
-            /fee|paid|amount|due|payment|balance/i.test(k)
-          );
-          console.log("Student doc — fee-related keys:", feeKeys);
-        }
-
-        // Probe a separate fees collection in case fee data lives there.
-        try {
-          const feesSnap = await getDocs(
-            collection(db, `schools/${schoolCode}/fees`)
-          );
-          console.log("Separate /fees collection size:", feesSnap.size);
-          if (feesSnap.size > 0) {
-            console.log("First /fees doc:", feesSnap.docs[0].id, feesSnap.docs[0].data());
-          }
-        } catch (probeErr) {
-          console.log("No accessible /fees collection:", probeErr.code || probeErr);
-        }
-
         const rows = snap.docs.map((doc) => {
           const d = doc.data();
           const feeAmount = Number(d.feeAmount ?? d.fee ?? d.monthlyFee ?? 0);

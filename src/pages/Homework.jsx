@@ -77,10 +77,6 @@ export default function Homework() {
           collection(db, `schools/${schoolCode}/homework`)
         );
 
-        if (snap.docs.length > 0) {
-          console.log("Homework doc:", snap.docs[0].id, snap.docs[0].data());
-        }
-
         const map = {};
         snap.docs.forEach((doc) => {
           const d = doc.data();

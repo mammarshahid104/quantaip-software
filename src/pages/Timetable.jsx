@@ -96,10 +96,6 @@ export default function Timetable() {
           collection(db, `schools/${schoolCode}/timetable`)
         );
 
-        if (snap.docs.length > 0) {
-          console.log("Timetable doc:", snap.docs[0].id, snap.docs[0].data());
-        }
-
         const map = {};
         snap.docs.forEach((doc) => {
           map[doc.id] = doc.data();

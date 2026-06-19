@@ -1,7 +1,8 @@
 // Teachers — searchable / filterable list backed by Firestore
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import AddTeacherModal from "../components/AddTeacherModal";
 
 function teacherName(d) {
   return d.fullName || d.name || "Unknown";
@@ -15,54 +16,51 @@ export default function Teachers() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [subject, setSubject] = useState("All Subjects");
+  const [showModal, setShowModal] = useState(false);
+  const [success, setSuccess] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const snap = await getDocs(
+        collection(db, `schools/${schoolCode}/teachers`)
+      );
+      const rows = snap.docs.map((doc) => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          name: teacherName(d),
+          subject: d.subject || "—",
+          classAssigned: Array.isArray(d.classesAssigned)
+            ? d.classesAssigned.join(", ")
+            : d.classesAssigned || "—",
+          phone: d.phone || d.phoneNumber || d.contact || "—",
+          status: (d.status || "active").toLowerCase(),
+        };
+      });
+      setTeachers(rows);
+    } catch (err) {
+      console.error("Teachers load failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have access to this school's teachers."
+          : "Couldn't load teachers. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolCode]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const snap = await getDocs(
-          collection(db, `schools/${schoolCode}/teachers`)
-        );
-
-        if (snap.docs.length > 0) {
-          console.log("Teacher fields:", snap.docs[0].data());
-        }
-
-        const rows = snap.docs.map((doc) => {
-          const d = doc.data();
-          return {
-            id: doc.id,
-            name: teacherName(d),
-            subject: d.subject || "—",
-            classAssigned: Array.isArray(d.classesAssigned)
-              ? d.classesAssigned.join(", ")
-              : d.classesAssigned || "—",
-            phone: d.phone || d.phoneNumber || d.contact || "—",
-            status: (d.status || "active").toLowerCase(),
-          };
-        });
-        if (!cancelled) setTeachers(rows);
-      } catch (err) {
-        if (cancelled) return;
-        console.error("Teachers load failed:", err);
-        setError(
-          err.code === "permission-denied"
-            ? "You don't have access to this school's teachers."
-            : "Couldn't load teachers. Please try again."
-        );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [schoolCode]);
+  }, [load]);
+
+  const handleSuccess = (message) => {
+    setSuccess(message);
+    load();
+    setTimeout(() => setSuccess(""), 4000);
+  };
 
   // Unique subjects present in the data, for the dropdown.
   const subjects = useMemo(() => {
@@ -93,9 +91,12 @@ export default function Teachers() {
             Staff for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary">+ Add Teacher</button>
+        <button className="btn-primary" onClick={() => setShowModal(true)}>
+          + Add Teacher
+        </button>
       </div>
 
+      {success && <div className="success-banner">{success}</div>}
       {error && <div className="login-error">{error}</div>}
 
       {/* Toolbar: search + subject filter */}
@@ -183,6 +184,14 @@ export default function Teachers() {
           </table>
         )}
       </div>
+
+      {showModal && (
+        <AddTeacherModal
+          schoolCode={schoolCode}
+          onClose={() => setShowModal(false)}
+          onSuccess={handleSuccess}
+        />
+      )}
     </div>
   );
 }

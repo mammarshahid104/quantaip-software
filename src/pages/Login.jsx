@@ -8,7 +8,6 @@ import { auth } from "../firebase/config";
 //   GHS-001  ->  ghs-001-adm-001@quantaip.edu.pk
 function buildAdminEmail(schoolCode) {
   const email = `${schoolCode.trim()}-ADM-001@quantaip.edu.pk`.toLowerCase();
-  console.log('Attempting login with:', email);
   return email;
 }
 

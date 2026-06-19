@@ -89,10 +89,6 @@ export default function Results() {
           collection(db, `schools/${schoolCode}/students`)
         );
 
-        if (snap.docs.length > 0) {
-          console.log("Marks sample:", snap.docs[0].data().marksMap);
-        }
-
         const rows = snap.docs.map((doc) => {
           const d = doc.data();
           return {
