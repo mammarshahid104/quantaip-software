@@ -725,6 +725,34 @@ p {
   margin-top: 16px;
   flex-wrap: wrap;
 }
+.editor-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.gen-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  padding: 14px 16px;
+  background: var(--cream);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+.gen-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.gen-field .tt-input {
+  width: 100px;
+}
 .header-actions {
   display: flex;
   gap: 10px;

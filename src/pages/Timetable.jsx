@@ -108,11 +108,45 @@ const emptyRow = (n) => ({
   isBreak: false,
 });
 
+// Add minutes to a "HH:MM" string, returning "HH:MM" (24h).
+function addMinutes(time, mins) {
+  const [h, m] = String(time).split(":").map((n) => parseInt(n, 10) || 0);
+  const total = h * 60 + m + mins;
+  const nh = Math.floor(total / 60) % 24;
+  const nm = total % 60;
+  return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+}
+
+// Standard full-day template (Mon–Thu, Sat).
+const STD_TEMPLATE = [
+  { periodNo: 1, startTime: "08:00", endTime: "08:40", subject: "", teacher: "", isBreak: false },
+  { periodNo: 2, startTime: "08:40", endTime: "09:20", subject: "", teacher: "", isBreak: false },
+  { periodNo: 3, startTime: "09:20", endTime: "10:00", subject: "", teacher: "", isBreak: false },
+  { periodNo: 0, startTime: "10:00", endTime: "10:30", subject: "Break", teacher: "", isBreak: true },
+  { periodNo: 4, startTime: "10:30", endTime: "11:10", subject: "", teacher: "", isBreak: false },
+  { periodNo: 5, startTime: "11:10", endTime: "11:50", subject: "", teacher: "", isBreak: false },
+  { periodNo: 6, startTime: "11:50", endTime: "12:30", subject: "", teacher: "", isBreak: false },
+  { periodNo: 7, startTime: "12:30", endTime: "13:10", subject: "", teacher: "", isBreak: false },
+];
+
+// Shorter Friday (Jummah) template.
+const FRI_TEMPLATE = [
+  { periodNo: 1, startTime: "08:00", endTime: "08:40", subject: "", teacher: "", isBreak: false },
+  { periodNo: 2, startTime: "08:40", endTime: "09:20", subject: "", teacher: "", isBreak: false },
+  { periodNo: 3, startTime: "09:20", endTime: "10:00", subject: "", teacher: "", isBreak: false },
+  { periodNo: 0, startTime: "10:00", endTime: "10:20", subject: "Break", teacher: "", isBreak: true },
+  { periodNo: 4, startTime: "10:20", endTime: "11:00", subject: "", teacher: "", isBreak: false },
+];
+
+const cloneRows = (rows) => rows.map((r) => ({ ...r }));
+
 export default function Timetable() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
 
   const [docs, setDocs] = useState({}); // className -> data
   const [teachers, setTeachers] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [subjectMap, setSubjectMap] = useState({}); // subject -> teacher name
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -123,6 +157,14 @@ export default function Timetable() {
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState(null); // { Monday: [rows], ... }
   const [saving, setSaving] = useState(false);
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [gen, setGen] = useState({
+    startTime: "08:00",
+    duration: 40,
+    breakAfter: 3,
+    breakDuration: 30,
+    periods: 7,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -141,17 +183,27 @@ export default function Timetable() {
         ttSnap.docs.forEach((d) => {
           map[d.id] = d.data();
         });
-        const teacherNames = teachersSnap.docs
-          .map((d) => {
-            const t = d.data();
-            return t.name || t.fullName || "";
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b));
+
+        // Teacher names + subject→teacher map + unique subjects.
+        const teacherNames = [];
+        const sMap = {};
+        const subjSet = new Set();
+        teachersSnap.docs.forEach((d) => {
+          const t = d.data();
+          const name = t.name || t.fullName || "";
+          if (name) teacherNames.push(name);
+          const subj = (t.subject || "").trim();
+          if (subj) {
+            subjSet.add(subj);
+            if (!sMap[subj]) sMap[subj] = name; // first teacher wins
+          }
+        });
 
         if (!cancelled) {
           setDocs(map);
-          setTeachers(teacherNames);
+          setTeachers(teacherNames.sort((a, b) => a.localeCompare(b)));
+          setSubjects(Array.from(subjSet).sort((a, b) => a.localeCompare(b)));
+          setSubjectMap(sMap);
         }
       } catch (err) {
         if (cancelled) return;
@@ -259,6 +311,79 @@ export default function Timetable() {
       }
       return copy;
     });
+  };
+
+  // Subject dropdown change → auto-fill teacher (still editable).
+  const handleSubjectChange = (index, value) => {
+    setDraft((prev) => {
+      const copy = { ...prev };
+      const arr = [...copy[fullDay]];
+      const teacher = subjectMap[value];
+      arr[index] = {
+        ...arr[index],
+        subject: value,
+        ...(teacher ? { teacher } : {}),
+      };
+      copy[fullDay] = arr;
+      return copy;
+    });
+  };
+
+  // Automation 1: load the standard / Friday template for the current day.
+  const loadTemplate = () => {
+    const existing = draft?.[fullDay] || [];
+    if (
+      existing.length > 0 &&
+      !window.confirm("This will replace existing periods. Continue?")
+    )
+      return;
+    const template = fullDay === "Friday" ? FRI_TEMPLATE : STD_TEMPLATE;
+    setDraft((prev) => ({ ...prev, [fullDay]: cloneRows(template) }));
+  };
+
+  // Automation 2: generate periods from start time / duration / break config.
+  const generatePeriods = () => {
+    const existing = draft?.[fullDay] || [];
+    if (
+      existing.length > 0 &&
+      !window.confirm("This will replace existing periods. Continue?")
+    )
+      return;
+
+    const duration = Number(gen.duration) || 40;
+    const breakAfter = Number(gen.breakAfter) || 0;
+    const breakDuration = Number(gen.breakDuration) || 0;
+    const periods = Number(gen.periods) || 0;
+    let cursor = gen.startTime || "08:00";
+    const rows = [];
+
+    for (let i = 1; i <= periods; i++) {
+      const end = addMinutes(cursor, duration);
+      rows.push({
+        periodNo: i,
+        startTime: cursor,
+        endTime: end,
+        subject: "",
+        teacher: "",
+        isBreak: false,
+      });
+      cursor = end;
+      if (i === breakAfter && breakDuration > 0) {
+        const bEnd = addMinutes(cursor, breakDuration);
+        rows.push({
+          periodNo: 0,
+          startTime: cursor,
+          endTime: bEnd,
+          subject: "Break",
+          teacher: "",
+          isBreak: true,
+        });
+        cursor = bEnd;
+      }
+    }
+
+    setDraft((prev) => ({ ...prev, [fullDay]: rows }));
+    setShowGenerator(false);
   };
 
   const saveTimetable = async () => {
@@ -369,6 +494,86 @@ export default function Timetable() {
 
       {/* Table */}
       <div className="card">
+        {/* Automation toolbar */}
+        {editMode && !loading && (
+          <>
+            <div className="editor-toolbar">
+              <button className="btn-edit" onClick={loadTemplate}>
+                📋 Load Template
+              </button>
+              <button
+                className="btn-edit"
+                onClick={() => setShowGenerator((v) => !v)}
+              >
+                ⚙️ Generate Periods
+              </button>
+            </div>
+
+            {showGenerator && (
+              <div className="gen-toolbar">
+                <label className="gen-field">
+                  School starts at
+                  <input
+                    className="tt-input"
+                    type="time"
+                    value={gen.startTime}
+                    onChange={(e) =>
+                      setGen((g) => ({ ...g, startTime: e.target.value }))
+                    }
+                  />
+                </label>
+                <label className="gen-field">
+                  Period duration (min)
+                  <input
+                    className="tt-input"
+                    type="number"
+                    value={gen.duration}
+                    onChange={(e) =>
+                      setGen((g) => ({ ...g, duration: e.target.value }))
+                    }
+                  />
+                </label>
+                <label className="gen-field">
+                  Break after period
+                  <input
+                    className="tt-input"
+                    type="number"
+                    value={gen.breakAfter}
+                    onChange={(e) =>
+                      setGen((g) => ({ ...g, breakAfter: e.target.value }))
+                    }
+                  />
+                </label>
+                <label className="gen-field">
+                  Break duration (min)
+                  <input
+                    className="tt-input"
+                    type="number"
+                    value={gen.breakDuration}
+                    onChange={(e) =>
+                      setGen((g) => ({ ...g, breakDuration: e.target.value }))
+                    }
+                  />
+                </label>
+                <label className="gen-field">
+                  Number of periods
+                  <input
+                    className="tt-input"
+                    type="number"
+                    value={gen.periods}
+                    onChange={(e) =>
+                      setGen((g) => ({ ...g, periods: e.target.value }))
+                    }
+                  />
+                </label>
+                <button className="btn-primary" onClick={generatePeriods}>
+                  Generate ✓
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
         {loading ? (
           <div className="table-state">
             <div className="route-loading-spinner" />
@@ -424,16 +629,27 @@ export default function Timetable() {
                       />
                     </td>
                     <td>
-                      <input
+                      <select
                         className="tt-input"
-                        type="text"
                         value={p.subject}
                         disabled={p.isBreak}
-                        placeholder="Subject"
                         onChange={(e) =>
-                          updateRow(i, "subject", e.target.value)
+                          handleSubjectChange(i, e.target.value)
                         }
-                      />
+                      >
+                        <option value="">— Subject —</option>
+                        {subjects.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                        {/* Preserve a subject not in the current list */}
+                        {p.subject &&
+                          p.subject !== "Break" &&
+                          !subjects.includes(p.subject) && (
+                            <option value={p.subject}>{p.subject}</option>
+                          )}
+                      </select>
                     </td>
                     <td>
                       <select
