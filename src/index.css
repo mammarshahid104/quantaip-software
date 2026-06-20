@@ -692,9 +692,41 @@ p {
   box-shadow: 0 0 0 0 rgba(184, 150, 10, 0.4);
   transition: box-shadow 0.2s, background 0.15s;
 }
-.btn-ai:hover {
+.btn-ai:hover:not(:disabled) {
   background: #122a52;
   box-shadow: 0 0 12px 0 rgba(184, 150, 10, 0.35);
+}
+.btn-ai:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  border-color: #d1d5db;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* AI usage / cooldown status bar (under the editor toolbar) */
+.ai-usage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.ai-usage-ok {
+  color: var(--navy);
+}
+.ai-usage-cooldown {
+  color: #b45309;
+}
+.ai-usage-locked {
+  color: #b91c1c;
+}
+.ai-usage-monthly {
+  color: #6b7280;
+  font-weight: 500;
 }
 
 /* AI generator loading overlay (inside modal) */

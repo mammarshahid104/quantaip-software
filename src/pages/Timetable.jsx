@@ -3,6 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, getDocs, doc, setDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { generateTimetable } from "../services/aiTimetable";
+import {
+  getAiUsage,
+  recordAiGeneration,
+  formatCountdown,
+  DAILY_LIMIT,
+  MONTHLY_LIMIT,
+} from "../services/aiUsageLimit";
 
 // Rotating status messages shown while the AI generates.
 const AI_MESSAGES = [
@@ -200,6 +207,28 @@ export default function Timetable() {
   const [aiError, setAiError] = useState("");
   const aiTimer = useRef(null);
 
+  // AI usage limits (per school, localStorage-backed). Re-read every second so
+  // the cooldown counts down and the daily/monthly counters stay current.
+  const [usage, setUsage] = useState(() => getAiUsage(schoolCode));
+  useEffect(() => {
+    const id = setInterval(() => setUsage(getAiUsage(schoolCode)), 1000);
+    return () => clearInterval(id);
+  }, [schoolCode]);
+
+  // Label/state for the "AI Generate" button based on current usage.
+  const aiButton = useMemo(() => {
+    if (usage.dailyReached) {
+      return { label: `🔒 AI Generate (${DAILY_LIMIT}/${DAILY_LIMIT} used today)`, disabled: true };
+    }
+    if (usage.monthlyReached) {
+      return { label: `🔒 AI Generate (monthly limit reached)`, disabled: true };
+    }
+    if (usage.cooldownLeft > 0) {
+      return { label: `🕐 Next generation in ${formatCountdown(usage.cooldownLeft)}`, disabled: true };
+    }
+    return { label: `🤖 AI Generate (${usage.dailyCount}/${DAILY_LIMIT} used today)`, disabled: false };
+  }, [usage]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -314,6 +343,9 @@ export default function Timetable() {
 
   // ----- AI generator -----
   const openAiModal = () => {
+    const fresh = getAiUsage(schoolCode);
+    setUsage(fresh);
+    if (!fresh.canGenerate) return; // limit reached / cooling down — button is disabled anyway
     setAiForm({
       subjects: [...subjects],
       periods: 7,
@@ -347,6 +379,18 @@ export default function Timetable() {
     }));
 
   const handleAiGenerate = async () => {
+    const current = getAiUsage(schoolCode);
+    if (!current.canGenerate) {
+      setAiError(
+        current.dailyReached
+          ? `Daily AI limit reached (${DAILY_LIMIT}/${DAILY_LIMIT}). Try again tomorrow! 🕐`
+          : current.monthlyReached
+          ? `Monthly AI limit reached (${MONTHLY_LIMIT}/${MONTHLY_LIMIT}).`
+          : `Please wait ${formatCountdown(current.cooldownLeft)} before generating again.`
+      );
+      setUsage(current);
+      return;
+    }
     if (aiForm.subjects.length === 0) {
       setAiError("Select at least one subject.");
       return;
@@ -391,6 +435,9 @@ export default function Timetable() {
       setDraft(d);
       setEditMode(true);
       setShowAi(false);
+      // Count this successful generation toward the daily/monthly limits and
+      // start the 10-minute cooldown.
+      setUsage(recordAiGeneration(schoolCode));
       showSuccess(
         "✨ AI generated clash-free timetable! Review and save when ready."
       );
@@ -688,8 +735,17 @@ export default function Timetable() {
         {editMode && !loading && (
           <>
             <div className="editor-toolbar">
-              <button className="btn-ai" onClick={openAiModal}>
-                🤖 AI Generate Timetable
+              <button
+                className="btn-ai"
+                onClick={openAiModal}
+                disabled={aiButton.disabled}
+                title={
+                  aiButton.disabled
+                    ? "AI generation is currently unavailable"
+                    : "Generate a clash-free timetable with AI"
+                }
+              >
+                {aiButton.label}
               </button>
               <button className="btn-edit" onClick={loadTemplate}>
                 📋 Load Template
@@ -700,6 +756,32 @@ export default function Timetable() {
               >
                 ⚙️ Generate Periods
               </button>
+            </div>
+
+            {/* AI usage / cooldown status */}
+            <div className="ai-usage-bar">
+              {usage.dailyReached ? (
+                <span className="ai-usage-locked">
+                  🔒 Daily AI limit reached ({DAILY_LIMIT}/{DAILY_LIMIT}). Try
+                  again tomorrow! 🕐
+                </span>
+              ) : usage.monthlyReached ? (
+                <span className="ai-usage-locked">
+                  🔒 Monthly AI limit reached ({MONTHLY_LIMIT}/{MONTHLY_LIMIT}).
+                </span>
+              ) : usage.cooldownLeft > 0 ? (
+                <span className="ai-usage-cooldown">
+                  🕐 Next generation available in{" "}
+                  {formatCountdown(usage.cooldownLeft)}
+                </span>
+              ) : (
+                <span className="ai-usage-ok">
+                  🤖 {usage.dailyCount}/{DAILY_LIMIT} daily AI generations used
+                </span>
+              )}
+              <span className="ai-usage-monthly">
+                {usage.monthlyCount}/{MONTHLY_LIMIT} monthly generations used
+              </span>
             </div>
 
             {showGenerator && (
