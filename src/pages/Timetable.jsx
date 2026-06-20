@@ -1,7 +1,16 @@
 // Timetable — view + inline editor (one doc per class)
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, getDocs, doc, setDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { generateTimetable } from "../services/aiTimetable";
+
+// Rotating status messages shown while the AI generates.
+const AI_MESSAGES = [
+  "🤖 AI is solving the timetable puzzle...",
+  "Checking teacher availability...",
+  "Eliminating clashes...",
+  "Optimizing subject distribution...",
+];
 
 const CLASSES = [
   "Nursery",
@@ -149,6 +158,7 @@ export default function Timetable() {
 
   const [docs, setDocs] = useState({}); // className -> data
   const [teachers, setTeachers] = useState([]);
+  const [teacherDetails, setTeacherDetails] = useState([]); // {name, subject, classesAssigned}
   const [subjects, setSubjects] = useState([]);
   const [subjectMap, setSubjectMap] = useState({}); // subject -> teacher name
   const [loading, setLoading] = useState(true);
@@ -182,6 +192,14 @@ export default function Timetable() {
     startTime: "07:45",
   });
 
+  // AI generator state.
+  const [showAi, setShowAi] = useState(false);
+  const [aiForm, setAiForm] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiStatus, setAiStatus] = useState(0);
+  const [aiError, setAiError] = useState("");
+  const aiTimer = useRef(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -200,8 +218,9 @@ export default function Timetable() {
           map[d.id] = d.data();
         });
 
-        // Teacher names + subject→teacher map + unique subjects.
+        // Teacher names + full details + subject→teacher map + unique subjects.
         const teacherNames = [];
+        const details = [];
         const sMap = {};
         const subjSet = new Set();
         teachersSnap.docs.forEach((d) => {
@@ -209,6 +228,13 @@ export default function Timetable() {
           const name = t.name || t.fullName || "";
           if (name) teacherNames.push(name);
           const subj = (t.subject || "").trim();
+          details.push({
+            name,
+            subject: subj,
+            classesAssigned: Array.isArray(t.classesAssigned)
+              ? t.classesAssigned
+              : [],
+          });
           if (subj) {
             subjSet.add(subj);
             if (!sMap[subj]) sMap[subj] = name; // first teacher wins
@@ -218,6 +244,7 @@ export default function Timetable() {
         if (!cancelled) {
           setDocs(map);
           setTeachers(teacherNames.sort((a, b) => a.localeCompare(b)));
+          setTeacherDetails(details);
           setSubjects(Array.from(subjSet).sort((a, b) => a.localeCompare(b)));
           setSubjectMap(sMap);
         }
@@ -262,6 +289,117 @@ export default function Timetable() {
   const showSuccess = (msg) => {
     setSuccess(msg);
     setTimeout(() => setSuccess(""), 4000);
+  };
+
+  // Clash index: teacher busy at day+startTime across OTHER classes' saved timetables.
+  const clashIndex = useMemo(() => {
+    const map = {};
+    for (const [cls, data] of Object.entries(docs)) {
+      if (cls === selectedClass) continue;
+      for (const day of DAYS) {
+        for (const p of getDayPeriods(data, day)) {
+          if (p.teacher && p.startTime) {
+            map[`${p.teacher.toLowerCase()}||${day.full}||${p.startTime}`] = cls;
+          }
+        }
+      }
+    }
+    return map;
+  }, [docs, selectedClass]);
+
+  const findClash = (teacher, dayFull, startTime) => {
+    if (!teacher || !startTime) return null;
+    return clashIndex[`${teacher.toLowerCase()}||${dayFull}||${startTime}`] || null;
+  };
+
+  // ----- AI generator -----
+  const openAiModal = () => {
+    setAiForm({
+      subjects: [...subjects],
+      periods: 7,
+      startTime: "08:00",
+      duration: 40,
+      breakAfter: 3,
+      breakDuration: 30,
+      assembly: true,
+      assemblyLabel: "Assembly",
+      assemblyDuration: 15,
+      days: DAYS.map((d) => d.full),
+    });
+    setAiError("");
+    setShowAi(true);
+  };
+
+  const toggleAiSubject = (s) =>
+    setAiForm((f) => ({
+      ...f,
+      subjects: f.subjects.includes(s)
+        ? f.subjects.filter((x) => x !== s)
+        : [...f.subjects, s],
+    }));
+
+  const toggleAiDay = (day) =>
+    setAiForm((f) => ({
+      ...f,
+      days: f.days.includes(day)
+        ? f.days.filter((x) => x !== day)
+        : [...f.days, day],
+    }));
+
+  const handleAiGenerate = async () => {
+    if (aiForm.subjects.length === 0) {
+      setAiError("Select at least one subject.");
+      return;
+    }
+    if (aiForm.days.length === 0) {
+      setAiError("Select at least one day.");
+      return;
+    }
+    setAiError("");
+    setAiLoading(true);
+    setAiStatus(0);
+    aiTimer.current = setInterval(() => {
+      setAiStatus((s) => (s + 1) % AI_MESSAGES.length);
+    }, 2000);
+
+    try {
+      const result = await generateTimetable({
+        subjects: aiForm.subjects,
+        teachers: teacherDetails,
+        periods: Number(aiForm.periods) || 7,
+        startTime: aiForm.startTime,
+        duration: Number(aiForm.duration) || 40,
+        breakAfter: Number(aiForm.breakAfter) || 3,
+        breakDuration: Number(aiForm.breakDuration) || 30,
+        days: aiForm.days,
+        assembly: aiForm.assembly
+          ? {
+              label: aiForm.assemblyLabel,
+              duration: Number(aiForm.assemblyDuration) || 15,
+            }
+          : null,
+        className: selectedClass,
+      });
+
+      // Load the AI result into the editor draft (all days).
+      const d = {};
+      for (const day of DAYS) {
+        d[day.full] = toRows(
+          Array.isArray(result[day.full]) ? result[day.full] : []
+        );
+      }
+      setDraft(d);
+      setEditMode(true);
+      setShowAi(false);
+      showSuccess(
+        "✨ AI generated clash-free timetable! Review and save when ready."
+      );
+    } catch (err) {
+      setAiError(err.message || "AI generation failed. Please try again.");
+    } finally {
+      clearInterval(aiTimer.current);
+      setAiLoading(false);
+    }
   };
 
   // ----- Edit mode actions -----
@@ -550,6 +688,9 @@ export default function Timetable() {
         {editMode && !loading && (
           <>
             <div className="editor-toolbar">
+              <button className="btn-ai" onClick={openAiModal}>
+                🤖 AI Generate Timetable
+              </button>
               <button className="btn-edit" onClick={loadTemplate}>
                 📋 Load Template
               </button>
@@ -691,12 +832,19 @@ export default function Timetable() {
               </tr>
             </thead>
             <tbody>
-              {viewRows.map((p, i) =>
-                editMode ? (
+              {viewRows.map((p, i) => {
+                if (editMode) {
+                  const clash =
+                    !p.isBreak && !p.isAssembly
+                      ? findClash(p.teacher, fullDay, p.startTime)
+                      : null;
+                  return (
                   <tr
                     key={i}
                     className={
-                      p.isBreak
+                      clash
+                        ? "row-clash"
+                        : p.isBreak
                         ? "row-break"
                         : p.isAssembly
                         ? "row-assembly"
@@ -788,6 +936,11 @@ export default function Timetable() {
                           <option value={p.teacher}>{p.teacher}</option>
                         )}
                       </select>
+                      {clash && (
+                        <span className="clash-warning">
+                          ⚠️ {p.teacher} is already teaching {clash} at this time!
+                        </span>
+                      )}
                     </td>
                     <td>
                       <input
@@ -806,7 +959,9 @@ export default function Timetable() {
                       </button>
                     </td>
                   </tr>
-                ) : (
+                  );
+                }
+                return (
                   <tr
                     key={i}
                     className={
@@ -830,8 +985,8 @@ export default function Timetable() {
                     </td>
                     <td>{p.isBreak ? "—" : p.teacher || "—"}</td>
                   </tr>
-                )
-              )}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -933,6 +1088,213 @@ export default function Timetable() {
                 Apply Template
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Timetable Generator modal */}
+      {showAi && aiForm && (
+        <div
+          className="modal-overlay"
+          onClick={aiLoading ? undefined : () => setShowAi(false)}
+        >
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">🤖 AI Timetable Generator</span>
+              {!aiLoading && (
+                <button
+                  className="modal-close"
+                  onClick={() => setShowAi(false)}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {aiLoading ? (
+              <div className="ai-loading">
+                <div className="ai-spinner" />
+                <div className="ai-loading-title">{AI_MESSAGES[0]}</div>
+                <div className="ai-loading-status">{AI_MESSAGES[aiStatus]}</div>
+              </div>
+            ) : (
+              <>
+                <div className="modal-body">
+                  {aiError && <div className="login-error">{aiError}</div>}
+
+                  <p className="page-subtitle" style={{ marginBottom: 16 }}>
+                    Generating a clash-free timetable for{" "}
+                    <strong>{selectedClass}</strong>.
+                  </p>
+
+                  {/* Subjects */}
+                  <div className="field">
+                    <span className="field-label">Subjects needed</span>
+                    {subjects.length === 0 ? (
+                      <p className="page-subtitle">
+                        No subjects found — add teachers with subjects first.
+                      </p>
+                    ) : (
+                      <div className="checkbox-grid">
+                        {subjects.map((s) => (
+                          <label className="checkbox-item" key={s}>
+                            <input
+                              type="checkbox"
+                              checked={aiForm.subjects.includes(s)}
+                              onChange={() => toggleAiSubject(s)}
+                            />
+                            {s}
+                            {subjectMap[s] ? ` (${subjectMap[s]})` : ""}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Config grid */}
+                  <div className="gen-toolbar" style={{ marginTop: 4 }}>
+                    <label className="gen-field">
+                      Periods per day
+                      <input
+                        className="tt-input"
+                        type="number"
+                        value={aiForm.periods}
+                        onChange={(e) =>
+                          setAiForm((f) => ({ ...f, periods: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="gen-field">
+                      School start time
+                      <input
+                        className="tt-input"
+                        type="time"
+                        value={aiForm.startTime}
+                        onChange={(e) =>
+                          setAiForm((f) => ({ ...f, startTime: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="gen-field">
+                      Period duration (min)
+                      <input
+                        className="tt-input"
+                        type="number"
+                        value={aiForm.duration}
+                        onChange={(e) =>
+                          setAiForm((f) => ({ ...f, duration: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="gen-field">
+                      Break after period
+                      <input
+                        className="tt-input"
+                        type="number"
+                        value={aiForm.breakAfter}
+                        onChange={(e) =>
+                          setAiForm((f) => ({
+                            ...f,
+                            breakAfter: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="gen-field">
+                      Break duration (min)
+                      <input
+                        className="tt-input"
+                        type="number"
+                        value={aiForm.breakDuration}
+                        onChange={(e) =>
+                          setAiForm((f) => ({
+                            ...f,
+                            breakDuration: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+
+                  {/* Assembly */}
+                  <label
+                    className="checkbox-item"
+                    style={{ marginTop: 14, marginBottom: 8 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={aiForm.assembly}
+                      onChange={(e) =>
+                        setAiForm((f) => ({ ...f, assembly: e.target.checked }))
+                      }
+                    />
+                    Include Assembly / Zero Period
+                  </label>
+                  {aiForm.assembly && (
+                    <div className="gen-toolbar">
+                      <label className="gen-field">
+                        Assembly label
+                        <input
+                          className="tt-input"
+                          type="text"
+                          value={aiForm.assemblyLabel}
+                          onChange={(e) =>
+                            setAiForm((f) => ({
+                              ...f,
+                              assemblyLabel: e.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="gen-field">
+                        Assembly duration (min)
+                        <input
+                          className="tt-input"
+                          type="number"
+                          value={aiForm.assemblyDuration}
+                          onChange={(e) =>
+                            setAiForm((f) => ({
+                              ...f,
+                              assemblyDuration: e.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Days */}
+                  <div className="field" style={{ marginTop: 14 }}>
+                    <span className="field-label">Days</span>
+                    <div className="checkbox-grid">
+                      {DAYS.map((d) => (
+                        <label className="checkbox-item" key={d.full}>
+                          <input
+                            type="checkbox"
+                            checked={aiForm.days.includes(d.full)}
+                            onChange={() => toggleAiDay(d.full)}
+                          />
+                          {d.full}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    className="btn-cancel"
+                    onClick={() => setShowAi(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button className="btn-ai" onClick={handleAiGenerate}>
+                    Generate with AI ✨
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
