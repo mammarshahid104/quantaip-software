@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import AssignHomeworkModal from "../components/AssignHomeworkModal";
+import DiaryModal from "../components/DiaryModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 // Class ordering: Nursery → Prep → KG → Grade 1..12, unknowns last.
@@ -75,6 +76,7 @@ export default function Homework() {
   const [success, setSuccess] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [showAssign, setShowAssign] = useState(false);
+  const [showDiary, setShowDiary] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // { className, item }
   const [deleting, setDeleting] = useState(false);
 
@@ -202,9 +204,14 @@ export default function Homework() {
             Assignments for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowAssign(true)}>
-          + Assign Homework
-        </button>
+        <div className="header-actions">
+          <button className="btn-edit" onClick={() => setShowDiary(true)}>
+            📄 Generate Diary
+          </button>
+          <button className="btn-primary" onClick={() => setShowAssign(true)}>
+            + Assign Homework
+          </button>
+        </div>
       </div>
 
       {success && <div className="success-banner">{success}</div>}
@@ -295,6 +302,18 @@ export default function Homework() {
           defaultClass={selectedClass}
           onClose={() => setShowAssign(false)}
           onSuccess={handleSuccess}
+        />
+      )}
+
+      {showDiary && (
+        <DiaryModal
+          schoolCode={schoolCode}
+          defaultClass={selectedClass}
+          onClose={() => setShowDiary(false)}
+          onSuccess={(msg) => {
+            setSuccess(msg);
+            setTimeout(() => setSuccess(""), 4000);
+          }}
         />
       )}
 
