@@ -30,11 +30,16 @@ const NAV_GROUPS = [
     title: "REPORTS",
     items: [{ label: "Analytics", to: "/analytics", icon: "📉" }],
   },
+  {
+    title: "SYSTEM",
+    items: [{ label: "Settings", to: "/settings", icon: "⚙️" }],
+  },
 ];
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const schoolCode = localStorage.getItem("schoolCode") || "—";
+  const schoolName = localStorage.getItem("schoolName") || "";
   const userName = localStorage.getItem("userName") || "Administrator";
 
   const handleLogout = async () => {
@@ -56,7 +61,7 @@ export default function Sidebar() {
           QUANT<span className="sidebar-logo-accent">AI</span>P
           <div className="sidebar-logo-sub">EduOS</div>
         </div>
-        <div className="school-chip">School: {schoolCode}</div>
+        <div className="school-chip">{schoolName || `School: ${schoolCode}`}</div>
       </div>
 
       {/* Grouped nav */}

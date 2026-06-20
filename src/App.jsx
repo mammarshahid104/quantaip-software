@@ -13,6 +13,7 @@ import Results from "./pages/Results";
 import Timetable from "./pages/Timetable";
 import Homework from "./pages/Homework";
 import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/timetable" element={<Timetable />} />
           <Route path="/homework" element={<Homework />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
 
         {/* Fallback */}
