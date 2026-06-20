@@ -1,7 +1,15 @@
 // Homework — per-class assignment cards (one doc per class, with an items array)
-import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+} from "firebase/firestore";
 import { db } from "../firebase/config";
+import AssignHomeworkModal from "../components/AssignHomeworkModal";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 // Class ordering: Nursery → Prep → KG → Grade 1..12, unknowns last.
 const NAMED_RANK = {
@@ -64,43 +72,47 @@ export default function Homework() {
   const [docs, setDocs] = useState({}); // className -> items array
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
+  const [showAssign, setShowAssign] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { className, item }
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const snap = await getDocs(
+        collection(db, `schools/${schoolCode}/homework`)
+      );
+
+      const map = {};
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        map[d.id] = Array.isArray(data.items) ? data.items : [];
+      });
+      setDocs(map);
+    } catch (err) {
+      console.error("Homework load failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have access to this school's homework."
+          : "Couldn't load homework. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolCode]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const snap = await getDocs(
-          collection(db, `schools/${schoolCode}/homework`)
-        );
-
-        const map = {};
-        snap.docs.forEach((doc) => {
-          const d = doc.data();
-          map[doc.id] = Array.isArray(d.items) ? d.items : [];
-        });
-        if (!cancelled) setDocs(map);
-      } catch (err) {
-        if (cancelled) return;
-        console.error("Homework load failed:", err);
-        setError(
-          err.code === "permission-denied"
-            ? "You don't have access to this school's homework."
-            : "Couldn't load homework. Please try again."
-        );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [schoolCode]);
+  }, [load]);
+
+  const handleSuccess = (message) => {
+    setSuccess(message);
+    load();
+    setTimeout(() => setSuccess(""), 4000);
+  };
 
   const classes = useMemo(() => Object.keys(docs).sort(classSort), [docs]);
 
@@ -115,6 +127,8 @@ export default function Homework() {
       .map((it) => {
         const date = parseDate(it.dueDate ?? it.due ?? it.deadline);
         return {
+          id: it.id || "",
+          raw: it, // original stored object, for delete-by-value fallback
           subject: it.subject || "—",
           title: it.title || it.name || "Untitled",
           description: it.description || it.desc || it.details || "",
@@ -141,6 +155,38 @@ export default function Homework() {
     return { total: items.length, upcoming, overdue };
   }, [items]);
 
+  // Delete one homework item: re-read the current array, drop the matching
+  // item (by id, falling back to value match for legacy items), then write back.
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    const { className, item } = deleteTarget;
+    setDeleting(true);
+    try {
+      const ref = doc(db, `schools/${schoolCode}/homework/${className}`);
+      const snap = await getDoc(ref);
+      const current = Array.isArray(snap.data()?.items)
+        ? snap.data().items
+        : [];
+      const itemKey = JSON.stringify(item.raw);
+      const remaining = current.filter((x) =>
+        item.id ? x.id !== item.id : JSON.stringify(x) !== itemKey
+      );
+      await updateDoc(ref, { items: remaining });
+      setDeleteTarget(null);
+      handleSuccess("Homework deleted successfully!");
+    } catch (err) {
+      console.error("Delete homework failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have permission to delete homework."
+          : "Couldn't delete homework. Please try again."
+      );
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const cards = [
     { label: "Total Assignments", value: summary.total, icon: "📚" },
     { label: "Upcoming", value: summary.upcoming, icon: "🟢" },
@@ -149,13 +195,19 @@ export default function Homework() {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <h1 className="page-title">Homework</h1>
-        <p className="page-subtitle">
-          Assignments for <strong>{schoolCode}</strong>
-        </p>
+      <div className="page-head page-head-row">
+        <div>
+          <h1 className="page-title">Homework</h1>
+          <p className="page-subtitle">
+            Assignments for <strong>{schoolCode}</strong>
+          </p>
+        </div>
+        <button className="btn-primary" onClick={() => setShowAssign(true)}>
+          + Assign Homework
+        </button>
       </div>
 
+      {success && <div className="success-banner">{success}</div>}
       {error && <div className="login-error">{error}</div>}
 
       {/* Class chips */}
@@ -222,9 +274,38 @@ export default function Homework() {
                   Assigned by: <strong>{it.assignedBy}</strong>
                 </span>
               </div>
+              <div className="hw-card-actions">
+                <button
+                  className="btn-delete"
+                  onClick={() =>
+                    setDeleteTarget({ className: selectedClass, item: it })
+                  }
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
+      )}
+
+      {showAssign && (
+        <AssignHomeworkModal
+          schoolCode={schoolCode}
+          defaultClass={selectedClass}
+          onClose={() => setShowAssign(false)}
+          onSuccess={handleSuccess}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete Homework"
+          message="Delete this homework assignment?"
+          loading={deleting}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDelete}
+        />
       )}
     </div>
   );
