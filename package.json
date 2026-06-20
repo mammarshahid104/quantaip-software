@@ -1,7 +1,9 @@
 {
   "name": "quantaip-web",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "QUANTAIP EduOS — AI-Powered School Management System",
+  "author": "Ammar Shahid <ammar@quantaip.org>",
   "type": "module",
   "main": "electron/main.cjs",
   "homepage": "./",
