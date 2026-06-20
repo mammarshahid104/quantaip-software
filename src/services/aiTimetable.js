@@ -1,13 +1,13 @@
-// AI-powered timetable generation via the Anthropic API (browser-direct).
+// AI-powered timetable generation via the OpenAI API (browser-direct).
 //
-// SECURITY NOTE: This calls the Anthropic API directly from the browser using
-// VITE_ANTHROPIC_API_KEY, which is inlined into the client bundle at build time.
+// SECURITY NOTE: This calls the OpenAI API directly from the browser using
+// VITE_OPENAI_API_KEY, which is inlined into the client bundle at build time.
 // That key is therefore extractable by anyone who uses the deployed app. This is
 // acceptable only for a trusted/internal admin audience. For a public or
 // multi-tenant deployment, move this call behind a backend (e.g. a Firebase
 // Cloud Function) so the key never reaches the browser.
-const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-6";
+const API_URL = "https://api.openai.com/v1/chat/completions";
+const MODEL = "gpt-4o-mini";
 
 function buildPrompt(params) {
   const {
@@ -86,10 +86,10 @@ function extractJson(text) {
 }
 
 export async function generateTimetable(params) {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "Missing Anthropic API key. Add VITE_ANTHROPIC_API_KEY to your .env.local file and restart the dev server."
+      "Missing OpenAI API key. Add VITE_OPENAI_API_KEY to your .env.local file and restart the dev server."
     );
   }
 
@@ -97,15 +97,12 @@ export async function generateTimetable(params) {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      // Required for direct browser calls to the Anthropic API.
-      "anthropic-dangerous-direct-browser-access": "true",
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 8000,
       messages: [{ role: "user", content: buildPrompt(params) }],
+      max_tokens: 4000,
     }),
   });
 
@@ -123,7 +120,7 @@ export async function generateTimetable(params) {
   }
 
   const data = await response.json();
-  const text = data?.content?.[0]?.text || "";
+  const text = data?.choices?.[0]?.message?.content || "";
   if (!text) throw new Error("AI returned an empty response.");
 
   try {
