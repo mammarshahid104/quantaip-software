@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import Toast from "../components/Toast";
 
 function studentName(d) {
   return d.fullName || d.name || "Unknown";
@@ -25,6 +26,7 @@ export default function Fees() {
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState("All Classes");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +129,12 @@ export default function Fees() {
             Fees for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary">+ Record Payment</button>
+        <button
+          className="btn-primary"
+          onClick={() => setToast("🚧 Fee recording — coming soon!")}
+        >
+          + Record Payment
+        </button>
       </div>
 
       {error && <div className="login-error">{error}</div>}
@@ -228,7 +235,14 @@ export default function Fees() {
                     </span>
                   </td>
                   <td>
-                    <button className="btn-view">View</button>
+                    <button
+                      className="btn-view"
+                      onClick={() =>
+                        setToast("🚧 Fee detail page — coming soon!")
+                      }
+                    >
+                      View
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -236,6 +250,8 @@ export default function Fees() {
           </table>
         )}
       </div>
+
+      <Toast message={toast} onClose={() => setToast("")} />
     </div>
   );
 }

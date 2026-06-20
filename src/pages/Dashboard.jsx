@@ -1,5 +1,6 @@
 // Dashboard — live Firestore stat cards + recent students table
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   getCountFromServer,
@@ -29,6 +30,7 @@ function tallyAttendance(attendanceMap) {
 
 export default function Dashboard() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -197,7 +199,13 @@ export default function Dashboard() {
       <div className="card">
         <div className="card-head">
           <h2 className="card-title">Recent Students</h2>
-          <span className="card-action">View all</span>
+          <span
+            className="card-action"
+            onClick={() => navigate("/students")}
+            style={{ cursor: "pointer" }}
+          >
+            View all
+          </span>
         </div>
 
         {loading ? (

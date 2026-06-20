@@ -1238,3 +1238,31 @@ p {
     padding: 18px;
   }
 }
+
+/* ===========================================================
+   Toast — bottom-right "coming soon" notifications
+   =========================================================== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #0d1f3c;
+  color: #d4af37;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 9999;
+  animation: toastSlideIn 0.3s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+@keyframes toastSlideIn {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

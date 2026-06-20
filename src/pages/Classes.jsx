@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import Toast from "../components/Toast";
 
 // Order: Nursery, Prep, KG, then Grade 1..12, unknowns last.
 const NAMED_RANK = {
@@ -33,6 +34,7 @@ export default function Classes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +128,12 @@ export default function Classes() {
             Classes for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary">+ Add Class</button>
+        <button
+          className="btn-primary"
+          onClick={() => setToast("🚧 Add Class — coming soon!")}
+        >
+          + Add Class
+        </button>
       </div>
 
       {error && <div className="login-error">{error}</div>}
@@ -184,7 +191,14 @@ export default function Classes() {
                   <td>{c.sections.length > 0 ? c.sections.join(", ") : "—"}</td>
                   <td>{c.teacher}</td>
                   <td>
-                    <button className="btn-view">View</button>
+                    <button
+                      className="btn-view"
+                      onClick={() =>
+                        setToast("🚧 Class detail page — coming soon!")
+                      }
+                    >
+                      View
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -192,6 +206,8 @@ export default function Classes() {
           </table>
         )}
       </div>
+
+      <Toast message={toast} onClose={() => setToast("")} />
     </div>
   );
 }
