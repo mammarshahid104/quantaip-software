@@ -35,6 +35,11 @@ function createWindow() {
     win.focus();
   });
 
+  // Surface load failures (wrong path, missing assets) instead of a blank window
+  win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error("Failed to load:", code, desc, url);
+  });
+
   // Open external links in the user's default browser, not inside the app
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);

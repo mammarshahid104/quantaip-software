@@ -1,4 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+// HashRouter (not BrowserRouter): the packaged desktop app loads from a
+// file:// URL whose origin is null, so the History API used by BrowserRouter
+// throws a SecurityError on navigation and the app renders blank. Hash-based
+// routing (#/route) sidesteps the History API and works under file:// and http.
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -17,7 +21,7 @@ import Settings from "./pages/Settings";
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         {/* Public */}
         <Route path="/" element={<Login />} />
@@ -46,6 +50,6 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
