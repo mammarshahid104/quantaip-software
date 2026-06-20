@@ -80,6 +80,15 @@ function drawAtom(pdf, cx, cy, r) {
   pdf.circle(cx, cy, r * 0.18, "F"); // nucleus
 }
 
+// jsPDF image format from a base64 data URL (defaults to PNG).
+function imageFormat(dataUrl) {
+  const m = /^data:image\/(png|jpe?g|webp)/i.exec(dataUrl || "");
+  const t = m?.[1]?.toLowerCase();
+  if (t === "jpg" || t === "jpeg") return "JPEG";
+  if (t === "webp") return "WEBP";
+  return "PNG";
+}
+
 export async function generateDiary({ schoolCode, className, date, schoolName }) {
   const [subjects, hwMap] = await Promise.all([
     fetchClassSubjects(schoolCode, className),
@@ -102,15 +111,34 @@ export async function generateDiary({ schoolCode, className, date, schoolName })
   const margin = 20;
   const usableW = pageW - margin * 2;
 
-  // ----- Header: atom logo + school name -----
-  drawAtom(pdf, margin + 7, 22, 8);
+  // ----- Header: saved school logo (or atom placeholder) + school name -----
+  const savedLogo = localStorage.getItem("schoolLogo") || "";
+  const name =
+    String(schoolName || "").trim() ||
+    localStorage.getItem("schoolName") ||
+    "Green Hills School";
+
+  let nameX = margin + 20;
+  if (savedLogo) {
+    try {
+      // Logo on the left, 25mm × 25mm.
+      pdf.addImage(savedLogo, imageFormat(savedLogo), margin, 8, 25, 25);
+      nameX = margin + 30;
+    } catch (err) {
+      console.warn("Couldn't embed school logo, using placeholder:", err);
+      drawAtom(pdf, margin + 7, 20, 8);
+    }
+  } else {
+    drawAtom(pdf, margin + 7, 20, 8);
+  }
+
   pdf.setTextColor(...NAVY);
   pdf.setFont("times", "bold");
   pdf.setFontSize(26);
-  pdf.text(String(schoolName || "School"), margin + 20, 25);
+  pdf.text(name, nameX, 24);
 
   // ----- Gray "Daily Diary" bar -----
-  const barY = 33;
+  const barY = 36;
   pdf.setFillColor(220, 220, 220);
   pdf.rect(margin, barY, usableW, 9, "F");
   pdf.setFont("helvetica", "bold");
