@@ -723,9 +723,6 @@ p {
 .ai-usage-ok {
   color: var(--navy);
 }
-.ai-usage-cooldown {
-  color: #b45309;
-}
 .ai-usage-locked {
   color: #b91c1c;
 }

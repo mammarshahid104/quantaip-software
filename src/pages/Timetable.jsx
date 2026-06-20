@@ -6,8 +6,6 @@ import { generateTimetable } from "../services/aiTimetable";
 import {
   getAiUsage,
   recordAiGeneration,
-  formatCountdown,
-  DAILY_LIMIT,
   MONTHLY_LIMIT,
 } from "../services/aiUsageLimit";
 
@@ -207,26 +205,21 @@ export default function Timetable() {
   const [aiError, setAiError] = useState("");
   const aiTimer = useRef(null);
 
-  // AI usage limits (per school, localStorage-backed). Re-read every second so
-  // the cooldown counts down and the daily/monthly counters stay current.
+  // AI monthly usage limit (per school, localStorage-backed).
   const [usage, setUsage] = useState(() => getAiUsage(schoolCode));
-  useEffect(() => {
-    const id = setInterval(() => setUsage(getAiUsage(schoolCode)), 1000);
-    return () => clearInterval(id);
-  }, [schoolCode]);
 
   // Label/state for the "AI Generate" button based on current usage.
   const aiButton = useMemo(() => {
-    if (usage.dailyReached) {
-      return { label: `🔒 AI Generate (${DAILY_LIMIT}/${DAILY_LIMIT} used today)`, disabled: true };
-    }
     if (usage.monthlyReached) {
-      return { label: `🔒 AI Generate (monthly limit reached)`, disabled: true };
+      return {
+        label: `🔒 AI Generate (${MONTHLY_LIMIT}/${MONTHLY_LIMIT} this month)`,
+        disabled: true,
+      };
     }
-    if (usage.cooldownLeft > 0) {
-      return { label: `🕐 Next generation in ${formatCountdown(usage.cooldownLeft)}`, disabled: true };
-    }
-    return { label: `🤖 AI Generate (${usage.dailyCount}/${DAILY_LIMIT} used today)`, disabled: false };
+    return {
+      label: `🤖 AI Generate (${usage.monthlyCount}/${MONTHLY_LIMIT} this month)`,
+      disabled: false,
+    };
   }, [usage]);
 
   useEffect(() => {
@@ -382,11 +375,7 @@ export default function Timetable() {
     const current = getAiUsage(schoolCode);
     if (!current.canGenerate) {
       setAiError(
-        current.dailyReached
-          ? `Daily AI limit reached (${DAILY_LIMIT}/${DAILY_LIMIT}). Try again tomorrow! 🕐`
-          : current.monthlyReached
-          ? `Monthly AI limit reached (${MONTHLY_LIMIT}/${MONTHLY_LIMIT}).`
-          : `Please wait ${formatCountdown(current.cooldownLeft)} before generating again.`
+        `Monthly AI limit reached (${MONTHLY_LIMIT}/${MONTHLY_LIMIT}). Resets on 1st of next month! 📅`
       );
       setUsage(current);
       return;
@@ -435,8 +424,7 @@ export default function Timetable() {
       setDraft(d);
       setEditMode(true);
       setShowAi(false);
-      // Count this successful generation toward the daily/monthly limits and
-      // start the 10-minute cooldown.
+      // Count this successful generation toward the monthly limit.
       setUsage(recordAiGeneration(schoolCode));
       showSuccess(
         "✨ AI generated clash-free timetable! Review and save when ready."
@@ -758,29 +746,20 @@ export default function Timetable() {
               </button>
             </div>
 
-            {/* AI usage / cooldown status */}
+            {/* AI monthly usage status */}
             <div className="ai-usage-bar">
-              {usage.dailyReached ? (
-                <span className="ai-usage-locked">
-                  🔒 Daily AI limit reached ({DAILY_LIMIT}/{DAILY_LIMIT}). Try
-                  again tomorrow! 🕐
-                </span>
-              ) : usage.monthlyReached ? (
+              {usage.monthlyReached ? (
                 <span className="ai-usage-locked">
                   🔒 Monthly AI limit reached ({MONTHLY_LIMIT}/{MONTHLY_LIMIT}).
-                </span>
-              ) : usage.cooldownLeft > 0 ? (
-                <span className="ai-usage-cooldown">
-                  🕐 Next generation available in{" "}
-                  {formatCountdown(usage.cooldownLeft)}
+                  Resets on 1st of next month! 📅
                 </span>
               ) : (
                 <span className="ai-usage-ok">
-                  🤖 {usage.dailyCount}/{DAILY_LIMIT} daily AI generations used
+                  🤖 {usage.monthlyCount}/{MONTHLY_LIMIT} this month
                 </span>
               )}
               <span className="ai-usage-monthly">
-                {usage.monthlyCount}/{MONTHLY_LIMIT} monthly generations used
+                Resets on {usage.resetDate}
               </span>
             </div>
 
