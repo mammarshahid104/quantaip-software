@@ -22,11 +22,13 @@ function createWindow() {
   });
 
   // Load app
+  // Dev → local Vite server. Packaged → live Vercel deployment, so the
+  // desktop app always shows the latest version without rebuilding the .exe.
   if (isDev) {
     win.loadURL("http://localhost:5173");
     win.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"));
+    win.loadURL("https://quantaip-software.vercel.app");
   }
 
   // Show when ready (no white flash)
