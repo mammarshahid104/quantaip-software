@@ -1,4 +1,8 @@
-// Fee Management — fee data lives inside each student document
+// Fee Management — fee data lives in the mobile app's per-month subcollection:
+//   schools/{schoolCode}/fees/{month}/students/{studentId}
+// where month is a locale string like "June 2026". Student profile docs hold
+// no fee fields, so we read students for the roster and merge in the fee
+// records for the selected month.
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -17,8 +21,28 @@ function statusBadge(status) {
 
 const money = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
 
+// Month key in the SAME format the mobile app writes with:
+//   new Date().toLocaleString("default", { month: "long", year: "numeric" })
+// e.g. "June 2026".
+function monthKey(date) {
+  return date.toLocaleString("default", { month: "long", year: "numeric" });
+}
+
+// Last 6 months, current month first.
+function getLast6Months() {
+  const list = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    list.push(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+  }
+  return list;
+}
+
 export default function Fees() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
+
+  const months = useMemo(() => getLast6Months(), []);
+  const [month, setMonth] = useState(months[0]); // default: current month
 
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,30 +59,32 @@ export default function Fees() {
       setLoading(true);
       setError("");
       try {
-        const snap = await getDocs(
-          collection(db, `schools/${schoolCode}/students`)
-        );
+        // Roster (student profiles) + this month's fee records, in parallel.
+        const [studentsSnap, feesSnap] = await Promise.all([
+          getDocs(collection(db, `schools/${schoolCode}/students`)),
+          getDocs(collection(db, `schools/${schoolCode}/fees/${month}/students`)),
+        ]);
 
-        const rows = snap.docs.map((doc) => {
+        // Map: studentId -> fee data written by the mobile app.
+        const feeMap = {};
+        feesSnap.docs.forEach((doc) => {
+          feeMap[doc.id] = doc.data();
+        });
+
+        const rows = studentsSnap.docs.map((doc) => {
           const d = doc.data();
-          const feeAmount = Number(d.feeAmount ?? d.fee ?? d.monthlyFee ?? 0);
-          const paidAmount = Number(d.paidAmount ?? d.feePaid ?? 0);
-
-          // Prefer an explicit fee status field; otherwise derive one.
-          let status = (d.feeStatus || d.paymentStatus || "").toLowerCase();
-          if (!status) {
-            if (feeAmount > 0 && paidAmount >= feeAmount) status = "paid";
-            else if (paidAmount > 0) status = "pending";
-            else status = "pending";
-          }
-
+          const fee = feeMap[doc.id];
+          const feeAmount = Number(fee?.amount || 0);
+          const status = fee?.status || "pending";
           return {
             id: doc.id,
             name: studentName(d),
             cls: d["class"] || "—",
+            section: d.section || "—",
             feeAmount,
-            paidAmount,
+            paidAmount: status === "paid" ? feeAmount : 0,
             status,
+            paidOn: fee?.paidOn || null,
           };
         });
         if (!cancelled) setRecords(rows);
@@ -79,7 +105,7 @@ export default function Fees() {
     return () => {
       cancelled = true;
     };
-  }, [schoolCode]);
+  }, [schoolCode, month]);
 
   // Class dropdown options, derived from data.
   const classes = useMemo(() => {
@@ -108,7 +134,7 @@ export default function Fees() {
     let collected = 0;
     for (const r of records) {
       total += r.feeAmount;
-      collected += r.paidAmount;
+      if (r.status === "paid") collected += r.feeAmount;
     }
     return { total, collected, pending: Math.max(total - collected, 0) };
   }, [records]);
@@ -126,7 +152,7 @@ export default function Fees() {
         <div>
           <h1 className="page-title">Fee Management</h1>
           <p className="page-subtitle">
-            Fees for <strong>{schoolCode}</strong>
+            Fees for <strong>{schoolCode}</strong> · <strong>{month}</strong>
           </p>
         </div>
         <button
@@ -152,7 +178,7 @@ export default function Fees() {
         ))}
       </div>
 
-      {/* Toolbar: search + class + status */}
+      {/* Toolbar: search + month + class + status */}
       <div className="toolbar">
         <div className="search-box">
           <span className="search-icon">🔍</span>
@@ -164,6 +190,17 @@ export default function Fees() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <select
+          className="filter-select"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+        >
+          {months.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
         <select
           className="filter-select"
           value={classFilter}
@@ -215,6 +252,7 @@ export default function Fees() {
                 <th>Student ID</th>
                 <th>Student Name</th>
                 <th>Class</th>
+                <th>Section</th>
                 <th>Fee Amount</th>
                 <th>Paid Amount</th>
                 <th>Status</th>
@@ -227,6 +265,7 @@ export default function Fees() {
                   <td className="cell-muted">{r.id}</td>
                   <td className="cell-strong">{r.name}</td>
                   <td>{r.cls}</td>
+                  <td>{r.section}</td>
                   <td>{money(r.feeAmount)}</td>
                   <td>{money(r.paidAmount)}</td>
                   <td>
