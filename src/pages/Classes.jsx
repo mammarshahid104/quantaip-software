@@ -7,6 +7,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import AddClassModal from "../components/AddClassModal";
 import ViewClassModal from "../components/ViewClassModal";
+import EditInchargeModal from "../components/EditInchargeModal";
 
 // Order: Nursery, Prep, KG, then Grade 1..12, unknowns last.
 const NAMED_RANK = {
@@ -41,6 +42,7 @@ export default function Classes() {
   const [success, setSuccess] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [viewClass, setViewClass] = useState(null);
+  const [editInchargeClass, setEditInchargeClass] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -214,12 +216,20 @@ export default function Classes() {
                   <td>{c.sections.length > 0 ? c.sections.join(", ") : "—"}</td>
                   <td>{c.teacher}</td>
                   <td>
-                    <button
-                      className="btn-view"
-                      onClick={() => setViewClass(c.name)}
-                    >
-                      View
-                    </button>
+                    <div className="action-btns">
+                      <button
+                        className="btn-view"
+                        onClick={() => setViewClass(c.name)}
+                      >
+                        View
+                      </button>
+                      <button
+                        className="btn-edit"
+                        onClick={() => setEditInchargeClass(c.name)}
+                      >
+                        Edit Incharge
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -241,6 +251,15 @@ export default function Classes() {
           schoolCode={schoolCode}
           className={viewClass}
           onClose={() => setViewClass(null)}
+        />
+      )}
+
+      {editInchargeClass && (
+        <EditInchargeModal
+          schoolCode={schoolCode}
+          className={editInchargeClass}
+          onClose={() => setEditInchargeClass(null)}
+          onSuccess={handleSuccess}
         />
       )}
     </div>
