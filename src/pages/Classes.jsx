@@ -1,3 +1,4 @@
+// Classes page - View + Add modal - v2
 // Classes — merged from formal class docs (schools/{schoolCode}/classes) and
 // unique d["class"] values across students, so classes show even before any
 // students are assigned.
