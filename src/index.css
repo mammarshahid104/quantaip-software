@@ -438,8 +438,57 @@ p {
 .modal-close:hover {
   color: var(--gold-bright);
 }
+.modal-card-large {
+  max-width: 760px;
+  max-height: 85vh;
+}
 .modal-body {
   padding: 24px;
+}
+
+/* Class detail modal */
+.section-heading {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 22px 0 10px;
+}
+.section-heading:first-child {
+  margin-top: 0;
+}
+.section-count {
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+.class-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--card-bg, #f8fafc);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.info-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+.info-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.modal-table-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
 }
 .modal-footer {
   padding: 16px 24px;

@@ -1,8 +1,11 @@
-// Classes — derived from unique d["class"] values across students
-import { useEffect, useMemo, useState } from "react";
+// Classes — merged from formal class docs (schools/{schoolCode}/classes) and
+// unique d["class"] values across students, so classes show even before any
+// students are assigned.
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
-import Toast from "../components/Toast";
+import AddClassModal from "../components/AddClassModal";
+import ViewClassModal from "../components/ViewClassModal";
 
 // Order: Nursery, Prep, KG, then Grade 1..12, unknowns last.
 const NAMED_RANK = {
@@ -34,83 +37,103 @@ export default function Classes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [toast, setToast] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [viewClass, setViewClass] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const base = `schools/${schoolCode}`;
+      const [studentsSnap, teachersSnap, classesSnap] = await Promise.all([
+        getDocs(collection(db, `${base}/students`)),
+        getDocs(collection(db, `${base}/teachers`)),
+        getDocs(collection(db, `${base}/classes`)),
+      ]);
+
+      // Map class name -> teacher name (from teachers' classesAssigned).
+      const teacherByClass = new Map();
+      for (const doc of teachersSnap.docs) {
+        const t = doc.data();
+        const name = t.fullName || t.name || "—";
+        const assigned = Array.isArray(t.classesAssigned)
+          ? t.classesAssigned
+          : t.classesAssigned
+          ? [t.classesAssigned]
+          : [];
+        for (const cls of assigned) {
+          if (!teacherByClass.has(cls)) teacherByClass.set(cls, name);
+        }
+      }
+
+      // Group students by class -> { count, sections }.
+      const byClass = new Map();
+      const ensure = (cls) => {
+        if (!byClass.has(cls)) {
+          byClass.set(cls, { count: 0, sections: new Set() });
+        }
+        return byClass.get(cls);
+      };
+
+      for (const doc of studentsSnap.docs) {
+        const d = doc.data();
+        const cls = d["class"];
+        if (!cls) continue;
+        const entry = ensure(cls);
+        entry.count += 1;
+        if (d.section) entry.sections.add(d.section);
+      }
+
+      // Merge in formal class documents — they may have no students yet.
+      const formalTeacher = new Map();
+      for (const doc of classesSnap.docs) {
+        const c = doc.data();
+        const name = c.name || doc.id;
+        const entry = ensure(name);
+        if (c.section) entry.sections.add(c.section);
+        if (c.classTeacher && c.classTeacher.trim()) {
+          formalTeacher.set(name, c.classTeacher.trim());
+        }
+      }
+
+      const rows = Array.from(byClass.keys())
+        .sort(classSort)
+        .map((name) => {
+          const group = byClass.get(name);
+          return {
+            name,
+            students: group.count,
+            sections: Array.from(group.sections).sort((a, b) =>
+              a.localeCompare(b)
+            ),
+            teacher:
+              formalTeacher.get(name) || teacherByClass.get(name) || "—",
+          };
+        });
+
+      setClasses(rows);
+    } catch (err) {
+      console.error("Classes load failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have access to this school's classes."
+          : "Couldn't load classes. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolCode]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const base = `schools/${schoolCode}`;
-        const [studentsSnap, teachersSnap] = await Promise.all([
-          getDocs(collection(db, `${base}/students`)),
-          getDocs(collection(db, `${base}/teachers`)),
-        ]);
-
-        // Map class name -> teacher name (from teachers' classesAssigned).
-        const teacherByClass = new Map();
-        for (const doc of teachersSnap.docs) {
-          const t = doc.data();
-          const name = t.fullName || t.name || "—";
-          const assigned = Array.isArray(t.classesAssigned)
-            ? t.classesAssigned
-            : t.classesAssigned
-            ? [t.classesAssigned]
-            : [];
-          for (const cls of assigned) {
-            if (!teacherByClass.has(cls)) teacherByClass.set(cls, name);
-          }
-        }
-
-        // Group students by class -> { count, sections }.
-        const byClass = new Map();
-        for (const doc of studentsSnap.docs) {
-          const d = doc.data();
-          const cls = d["class"];
-          if (!cls) continue;
-          if (!byClass.has(cls)) {
-            byClass.set(cls, { count: 0, sections: new Set() });
-          }
-          const entry = byClass.get(cls);
-          entry.count += 1;
-          if (d.section) entry.sections.add(d.section);
-        }
-
-        const rows = Array.from(byClass.keys())
-          .sort(classSort)
-          .map((name) => {
-            const group = byClass.get(name);
-            return {
-              name,
-              students: group.count,
-              sections: Array.from(group.sections).sort((a, b) =>
-                a.localeCompare(b)
-              ),
-              teacher: teacherByClass.get(name) || "—",
-            };
-          });
-
-        if (!cancelled) setClasses(rows);
-      } catch (err) {
-        if (cancelled) return;
-        console.error("Classes load failed:", err);
-        setError(
-          err.code === "permission-denied"
-            ? "You don't have access to this school's classes."
-            : "Couldn't load classes. Please try again."
-        );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [schoolCode]);
+  }, [load]);
+
+  const handleSuccess = (message) => {
+    setSuccess(message);
+    load();
+    setTimeout(() => setSuccess(""), 4000);
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -128,14 +151,12 @@ export default function Classes() {
             Classes for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => setToast("🚧 Add Class — coming soon!")}
-        >
+        <button className="btn-primary" onClick={() => setShowAdd(true)}>
           + Add Class
         </button>
       </div>
 
+      {success && <div className="success-banner">{success}</div>}
       {error && <div className="login-error">{error}</div>}
 
       {/* Toolbar: search */}
@@ -193,9 +214,7 @@ export default function Classes() {
                   <td>
                     <button
                       className="btn-view"
-                      onClick={() =>
-                        setToast("🚧 Class detail page — coming soon!")
-                      }
+                      onClick={() => setViewClass(c.name)}
                     >
                       View
                     </button>
@@ -207,7 +226,21 @@ export default function Classes() {
         )}
       </div>
 
-      <Toast message={toast} onClose={() => setToast("")} />
+      {showAdd && (
+        <AddClassModal
+          schoolCode={schoolCode}
+          onClose={() => setShowAdd(false)}
+          onSuccess={handleSuccess}
+        />
+      )}
+
+      {viewClass && (
+        <ViewClassModal
+          schoolCode={schoolCode}
+          className={viewClass}
+          onClose={() => setViewClass(null)}
+        />
+      )}
     </div>
   );
 }
