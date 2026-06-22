@@ -20,7 +20,7 @@ export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
   const [form, setForm] = useState({
     name: "",
     section: "A",
-    classTeacher: "",
+    classIncharge: "",
   });
   const [teachers, setTeachers] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -36,11 +36,16 @@ export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
         const snap = await getDocs(
           collection(db, `schools/${schoolCode}/teachers`)
         );
-        const names = snap.docs
-          .map((d) => teacherName(d.data()))
-          .filter((n) => n && n !== "Unknown")
-          .sort((a, b) => a.localeCompare(b));
-        if (!cancelled) setTeachers(names);
+        // Store both id and name; classIncharge needs the teacher's doc ID
+        // (e.g. "GHS-001-TCH-0010") to match the mobile app.
+        const list = snap.docs
+          .map((d) => {
+            const data = d.data();
+            return { id: data.id || d.id, name: teacherName(data) };
+          })
+          .filter((t) => t.name && t.name !== "Unknown")
+          .sort((a, b) => a.name.localeCompare(b.name));
+        if (!cancelled) setTeachers(list);
       } catch (err) {
         console.error("Load teachers for class modal failed:", err);
       }
@@ -67,12 +72,19 @@ export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
 
     setSaving(true);
     try {
-      await setDoc(doc(db, `schools/${schoolCode}/classes`, name), {
-        name,
-        section: form.section.trim(),
-        classTeacher: form.classTeacher.trim(),
-        createdAt: serverTimestamp(),
-      });
+      const teacher = teachers.find((t) => t.id === form.classIncharge);
+      await setDoc(
+        doc(db, `schools/${schoolCode}/classes`, name),
+        {
+          name,
+          section: form.section.trim(),
+          classIncharge: teacher?.id || "",
+          classInchargeName: teacher?.name || "",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
       onSuccess?.(`Class "${name}" added successfully!`);
       onClose?.();
     } catch (err) {
@@ -124,16 +136,16 @@ export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
             </label>
 
             <label className="field">
-              <span className="field-label">Class Teacher</span>
+              <span className="field-label">Class Incharge</span>
               <select
                 className="field-input"
-                value={form.classTeacher}
-                onChange={(e) => update("classTeacher", e.target.value)}
+                value={form.classIncharge}
+                onChange={(e) => update("classIncharge", e.target.value)}
               >
                 <option value="">— None —</option>
-                {teachers.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
                   </option>
                 ))}
               </select>

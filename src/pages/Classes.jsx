@@ -87,14 +87,15 @@ export default function Classes() {
       }
 
       // Merge in formal class documents — they may have no students yet.
-      const formalTeacher = new Map();
+      // classInchargeName holds the incharge's display name (matches mobile).
+      const inchargeByClass = new Map();
       for (const doc of classesSnap.docs) {
         const c = doc.data();
         const name = c.name || doc.id;
         const entry = ensure(name);
         if (c.section) entry.sections.add(c.section);
-        if (c.classTeacher && c.classTeacher.trim()) {
-          formalTeacher.set(name, c.classTeacher.trim());
+        if (c.classInchargeName && c.classInchargeName.trim()) {
+          inchargeByClass.set(name, c.classInchargeName.trim());
         }
       }
 
@@ -109,7 +110,7 @@ export default function Classes() {
               a.localeCompare(b)
             ),
             teacher:
-              formalTeacher.get(name) || teacherByClass.get(name) || "—",
+              inchargeByClass.get(name) || teacherByClass.get(name) || "—",
           };
         });
 

@@ -69,12 +69,13 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
             subject: t.subject || "—",
           }));
 
-        // Class teacher: prefer the formal class doc, fall back to any teacher
-        // assigned to the class.
+        // Class incharge: prefer the formal class doc's classInchargeName
+        // (matches the mobile app), fall back to any teacher assigned to the
+        // class.
         const classDoc = classesSnap.docs.find((d) => d.id === className);
-        const formalTeacher = classDoc?.data()?.classTeacher;
+        const inchargeName = classDoc?.data()?.classInchargeName;
         const resolvedTeacher =
-          (formalTeacher && formalTeacher.trim()) ||
+          (inchargeName && inchargeName.trim()) ||
           classTeachers[0]?.name ||
           "—";
 
@@ -148,7 +149,7 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
                   </span>
                 </div>
                 <div className="info-item">
-                  <span className="info-label">Class Teacher</span>
+                  <span className="info-label">Class Incharge</span>
                   <span className="info-value">{classTeacher}</span>
                 </div>
               </div>
