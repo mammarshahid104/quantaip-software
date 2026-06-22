@@ -4,6 +4,8 @@ import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import AddStudentModal from "../components/AddStudentModal";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ImportExcelModal from "../components/ImportExcelModal";
+import { exportStudents } from "../services/excelExport";
 
 function studentName(d) {
   return d.fullName || "Unknown";
@@ -26,6 +28,7 @@ export default function Students() {
   const [search, setSearch] = useState("");
   const [grade, setGrade] = useState("All Grades");
   const [showModal, setShowModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editStudent, setEditStudent] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -128,9 +131,32 @@ export default function Students() {
             Roster for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowModal(true)}>
-          + Add Student
-        </button>
+        <div className="header-actions">
+          <button
+            className="btn-excel-import"
+            onClick={() => setShowImport(true)}
+          >
+            📤 Import Excel
+          </button>
+          <button
+            className="btn-excel-export"
+            onClick={() =>
+              exportStudents(
+                students.map((s) => ({
+                  ...s,
+                  fatherName: s.raw.fatherName,
+                  parentPhone: s.raw.parentPhone,
+                })),
+                schoolCode
+              )
+            }
+          >
+            📥 Export Excel
+          </button>
+          <button className="btn-primary" onClick={() => setShowModal(true)}>
+            + Add Student
+          </button>
+        </div>
       </div>
 
       {success && <div className="success-banner">{success}</div>}
@@ -243,6 +269,18 @@ export default function Students() {
           student={editStudent || undefined}
           onClose={closeModal}
           onSuccess={handleSuccess}
+        />
+      )}
+
+      {showImport && (
+        <ImportExcelModal
+          type="students"
+          schoolCode={schoolCode}
+          onClose={() => setShowImport(false)}
+          onSuccess={(msg) => {
+            setShowImport(false);
+            handleSuccess(msg);
+          }}
         />
       )}
 

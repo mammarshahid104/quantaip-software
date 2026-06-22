@@ -4,6 +4,8 @@ import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import AddTeacherModal from "../components/AddTeacherModal";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ImportExcelModal from "../components/ImportExcelModal";
+import { exportTeachers } from "../services/excelExport";
 
 function teacherName(d) {
   return d.fullName || d.name || "Unknown";
@@ -18,6 +20,7 @@ export default function Teachers() {
   const [search, setSearch] = useState("");
   const [subject, setSubject] = useState("All Subjects");
   const [showModal, setShowModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editTeacher, setEditTeacher] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -123,9 +126,33 @@ export default function Teachers() {
             Staff for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowModal(true)}>
-          + Add Teacher
-        </button>
+        <div className="header-actions">
+          <button
+            className="btn-excel-import"
+            onClick={() => setShowImport(true)}
+          >
+            📤 Import Excel
+          </button>
+          <button
+            className="btn-excel-export"
+            onClick={() =>
+              exportTeachers(
+                teachers.map((t) => ({
+                  name: t.name,
+                  subject: t.raw.subject || "",
+                  phone: t.raw.phone || "",
+                  classesAssigned: t.raw.classesAssigned || [],
+                })),
+                schoolCode
+              )
+            }
+          >
+            📥 Export Excel
+          </button>
+          <button className="btn-primary" onClick={() => setShowModal(true)}>
+            + Add Teacher
+          </button>
+        </div>
       </div>
 
       {success && <div className="success-banner">{success}</div>}
@@ -238,6 +265,18 @@ export default function Teachers() {
           teacher={editTeacher || undefined}
           onClose={closeModal}
           onSuccess={handleSuccess}
+        />
+      )}
+
+      {showImport && (
+        <ImportExcelModal
+          type="teachers"
+          schoolCode={schoolCode}
+          onClose={() => setShowImport(false)}
+          onSuccess={(msg) => {
+            setShowImport(false);
+            handleSuccess(msg);
+          }}
         />
       )}
 

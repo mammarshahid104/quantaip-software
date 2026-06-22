@@ -1415,3 +1415,86 @@ p {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
+
+/* ===========================================================
+   Excel Import / Export
+   =========================================================== */
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.btn-excel-import {
+  background: transparent;
+  border: 1.5px solid #217346;
+  color: #217346;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-excel-import:hover {
+  background: #217346;
+  color: white;
+}
+.btn-excel-export {
+  background: #217346;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-excel-export:hover {
+  background: #1a5c37;
+}
+.import-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.import-step {
+  background: #f8fafc;
+  border: 1px solid #ece5d3;
+  border-radius: 10px;
+  padding: 14px;
+}
+.import-step-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0d1f3c;
+  margin-bottom: 8px;
+}
+.import-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 8px;
+}
+.import-preview-table th {
+  background: #0d1f3c;
+  color: #d4af37;
+  padding: 6px 8px;
+  text-align: left;
+}
+.import-preview-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #ece5d3;
+}
+.progress-wrap {
+  background: #ece5d3;
+  border-radius: 999px;
+  height: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.progress-fill {
+  background: #b8960a;
+  height: 8px;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
