@@ -612,6 +612,25 @@ p {
   accent-color: var(--gold);
 }
 
+/* Class Incharge section (teacher modal) */
+.field-label-incharge {
+  color: var(--gold);
+}
+.field-subtext {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+  margin: -2px 0 8px;
+}
+.incharge-empty {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-muted, #6b7280);
+}
+.incharge-checkbox-item {
+  accent-color: #b8960a;
+}
+
 /* Success banner */
 .success-banner {
   background: rgba(16, 185, 129, 0.12);

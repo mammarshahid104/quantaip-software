@@ -1,6 +1,6 @@
 // Add / Edit Teacher modal — writes to schools/{schoolCode}/teachers
 // Pass a `teacher` prop ({ id, ...data }) to open in edit mode.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   collection,
   doc,
@@ -56,7 +56,43 @@ export default function AddTeacherModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Classes where this teacher is currently checked as incharge, plus the
+  // original set (from Firestore) so we only write the diff on save.
+  const [inchargeClasses, setInchargeClasses] = useState([]);
+  const [originalIncharge, setOriginalIncharge] = useState([]);
+
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  // On edit, load which classes already have this teacher as incharge
+  // (class.classIncharge === teacher.id), to pre-check the boxes.
+  useEffect(() => {
+    if (!isEdit) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDocs(
+          collection(db, `schools/${schoolCode}/classes`)
+        );
+        const mine = snap.docs
+          .filter((d) => d.data().classIncharge === teacher.id)
+          .map((d) => d.data().name || d.id);
+        if (!cancelled) {
+          setInchargeClasses(mine);
+          setOriginalIncharge(mine);
+        }
+      } catch (err) {
+        console.error("Load incharge classes failed:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, schoolCode, teacher?.id]);
+
+  const toggleIncharge = (cls) =>
+    setInchargeClasses((prev) =>
+      prev.includes(cls) ? prev.filter((c) => c !== cls) : [...prev, cls]
+    );
 
   const handleNameChange = (value) => {
     setForm((f) => ({
@@ -102,24 +138,53 @@ export default function AddTeacherModal({
         password: form.password,
       };
 
+      let teacherId;
       if (isEdit) {
-        await updateDoc(doc(colRef, teacher.id), fields);
-        onSuccess?.("Teacher updated successfully!");
+        teacherId = teacher.id;
+        await updateDoc(doc(colRef, teacherId), fields);
       } else {
         const snap = await getDocs(colRef);
         const next = nextNumberFrom(snap.docs);
         const padded = String(next).padStart(4, "0");
-        const generatedId = `${schoolCode}-TCH-${padded}`;
-        await setDoc(doc(colRef, generatedId), {
+        teacherId = `${schoolCode}-TCH-${padded}`;
+        await setDoc(doc(colRef, teacherId), {
           ...fields,
           role: "teacher",
           school: schoolCode,
           status: "active",
-          id: generatedId,
+          id: teacherId,
           createdAt: serverTimestamp(),
         });
-        onSuccess?.("Teacher added successfully!");
       }
+
+      // Sync class-incharge assignments — only for classes still assigned,
+      // and only the diff against what was loaded.
+      const classesRef = collection(db, `schools/${schoolCode}/classes`);
+      for (const cls of form.classesAssigned) {
+        const isChecked = inchargeClasses.includes(cls);
+        const wasChecked = originalIncharge.includes(cls);
+        if (isChecked && !wasChecked) {
+          await setDoc(
+            doc(classesRef, cls),
+            {
+              classIncharge: teacherId,
+              classInchargeName: fields.name,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } else if (!isChecked && wasChecked) {
+          await updateDoc(doc(classesRef, cls), {
+            classIncharge: "",
+            classInchargeName: "",
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      onSuccess?.(
+        isEdit ? "Teacher updated successfully!" : "Teacher added successfully!"
+      );
       onClose?.();
     } catch (err) {
       console.error("Save teacher failed:", err);
@@ -185,6 +250,32 @@ export default function AddTeacherModal({
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="field">
+              <span className="field-label field-label-incharge">
+                Class Incharge
+              </span>
+              <span className="field-subtext">
+                Select classes where this teacher is the class incharge
+              </span>
+              {form.classesAssigned.length === 0 ? (
+                <div className="incharge-empty">Assign classes first</div>
+              ) : (
+                <div className="checkbox-grid">
+                  {form.classesAssigned.map((c) => (
+                    <label className="checkbox-item incharge-checkbox-label" key={c}>
+                      <input
+                        type="checkbox"
+                        className="incharge-checkbox-item"
+                        checked={inchargeClasses.includes(c)}
+                        onChange={() => toggleIncharge(c)}
+                      />
+                      {c}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             <label className="field">
