@@ -2,9 +2,10 @@
 // the teachers who teach it. Students come from schools/{schoolCode}/students
 // where d["class"] === className; teachers from .../teachers where
 // classesAssigned includes className.
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import EditInchargeModal from "./EditInchargeModal";
 
 function studentName(d) {
   return d.fullName || d.name || "Unknown";
@@ -22,84 +23,80 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
   const [classTeacher, setClassTeacher] = useState("—");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showEditIncharge, setShowEditIncharge] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const base = `schools/${schoolCode}`;
+      const [studentsSnap, teachersSnap, classesSnap] = await Promise.all([
+        getDocs(collection(db, `${base}/students`)),
+        getDocs(collection(db, `${base}/teachers`)),
+        getDocs(collection(db, `${base}/classes`)),
+      ]);
+
+      // Students in this class.
+      const classStudents = studentsSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((d) => d["class"] === className)
+        .map((d) => ({
+          id: d.id,
+          rollNo: d.rollNo || "—",
+          name: studentName(d),
+          section: d.section || "—",
+          status: (d.status || "active").toLowerCase(),
+        }))
+        .sort((a, b) =>
+          String(a.rollNo).localeCompare(String(b.rollNo), undefined, {
+            numeric: true,
+          })
+        );
+
+      // Teachers who teach this class.
+      const classTeachers = teachersSnap.docs
+        .map((doc) => doc.data())
+        .filter((t) => {
+          const assigned = Array.isArray(t.classesAssigned)
+            ? t.classesAssigned
+            : t.classesAssigned
+            ? [t.classesAssigned]
+            : [];
+          return assigned.includes(className);
+        })
+        .map((t) => ({
+          name: teacherName(t),
+          subject: t.subject || "—",
+        }));
+
+      // Class incharge: prefer the formal class doc's classInchargeName
+      // (matches the mobile app), fall back to any teacher assigned to the
+      // class.
+      const classDoc = classesSnap.docs.find((d) => d.id === className);
+      const inchargeName = classDoc?.data()?.classInchargeName;
+      const resolvedTeacher =
+        (inchargeName && inchargeName.trim()) ||
+        classTeachers[0]?.name ||
+        "—";
+
+      setStudents(classStudents);
+      setTeachers(classTeachers);
+      setClassTeacher(resolvedTeacher);
+    } catch (err) {
+      console.error("Class detail load failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have access to this class."
+          : "Couldn't load class details. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolCode, className]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const base = `schools/${schoolCode}`;
-        const [studentsSnap, teachersSnap, classesSnap] = await Promise.all([
-          getDocs(collection(db, `${base}/students`)),
-          getDocs(collection(db, `${base}/teachers`)),
-          getDocs(collection(db, `${base}/classes`)),
-        ]);
-
-        // Students in this class.
-        const classStudents = studentsSnap.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter((d) => d["class"] === className)
-          .map((d) => ({
-            id: d.id,
-            rollNo: d.rollNo || "—",
-            name: studentName(d),
-            section: d.section || "—",
-            status: (d.status || "active").toLowerCase(),
-          }))
-          .sort((a, b) =>
-            String(a.rollNo).localeCompare(String(b.rollNo), undefined, {
-              numeric: true,
-            })
-          );
-
-        // Teachers who teach this class.
-        const classTeachers = teachersSnap.docs
-          .map((doc) => doc.data())
-          .filter((t) => {
-            const assigned = Array.isArray(t.classesAssigned)
-              ? t.classesAssigned
-              : t.classesAssigned
-              ? [t.classesAssigned]
-              : [];
-            return assigned.includes(className);
-          })
-          .map((t) => ({
-            name: teacherName(t),
-            subject: t.subject || "—",
-          }));
-
-        // Class incharge: prefer the formal class doc's classInchargeName
-        // (matches the mobile app), fall back to any teacher assigned to the
-        // class.
-        const classDoc = classesSnap.docs.find((d) => d.id === className);
-        const inchargeName = classDoc?.data()?.classInchargeName;
-        const resolvedTeacher =
-          (inchargeName && inchargeName.trim()) ||
-          classTeachers[0]?.name ||
-          "—";
-
-        if (!cancelled) {
-          setStudents(classStudents);
-          setTeachers(classTeachers);
-          setClassTeacher(resolvedTeacher);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error("Class detail load failed:", err);
-        setError(
-          err.code === "permission-denied"
-            ? "You don't have access to this class."
-            : "Couldn't load class details. Please try again."
-        );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [schoolCode, className]);
+    load();
+  }, [load]);
 
   const sections = useMemo(() => {
     const set = new Set(
@@ -150,7 +147,15 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
                 </div>
                 <div className="info-item">
                   <span className="info-label">Class Incharge</span>
-                  <span className="info-value">{classTeacher}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="info-value">{classTeacher}</span>
+                    <button
+                      className="btn-view"
+                      onClick={() => setShowEditIncharge(true)}
+                    >
+                      ✏️ Edit
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -229,6 +234,18 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
           )}
         </div>
       </div>
+
+      {showEditIncharge && (
+        <EditInchargeModal
+          schoolCode={schoolCode}
+          className={className}
+          onClose={() => setShowEditIncharge(false)}
+          onSuccess={() => {
+            setShowEditIncharge(false);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
