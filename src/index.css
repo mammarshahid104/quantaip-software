@@ -1266,3 +1266,152 @@ p {
     opacity: 1;
   }
 }
+
+/* ===========================================================
+   Fee Management
+   =========================================================== */
+/* Segmented tab control (Student Fees / Fee Structure) */
+.fee-tabs {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--white);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.fee-tab {
+  border: none;
+  background: transparent;
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 9px;
+  transition: background 0.15s, color 0.15s;
+}
+.fee-tab:hover {
+  background: rgba(184, 150, 10, 0.08);
+}
+.fee-tab.active {
+  background: var(--navy);
+  color: var(--gold-bright);
+}
+
+/* Green "Mark Paid" action button (matches btn-edit/btn-delete sizing) */
+.btn-ok {
+  border: 1px solid #047857;
+  color: #047857;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.btn-ok:hover {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+/* Small inline fee input used in the Fee Structure table */
+.fee-inline {
+  width: 120px;
+  padding: 7px 10px;
+  font-size: 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  outline: none;
+}
+.fee-inline:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(184, 150, 10, 0.15);
+}
+
+/* Final-amount preview inside the payment modal */
+.fee-preview {
+  background: var(--cream);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fee-preview-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.fee-preview-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+/* Key/value detail rows (View Payment modal) */
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--card-border);
+  font-size: 14px;
+}
+.detail-row:last-child {
+  border-bottom: none;
+}
+.detail-label {
+  color: var(--muted);
+  font-weight: 600;
+}
+.detail-value {
+  color: var(--navy);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Searchable student combobox (payment modal) */
+.combo {
+  position: relative;
+}
+.combo-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin-top: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--white);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+.combo-item {
+  padding: 9px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--card-border);
+}
+.combo-item:last-child {
+  border-bottom: none;
+}
+.combo-item:hover {
+  background: rgba(184, 150, 10, 0.08);
+}
+.combo-item-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.fee-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
