@@ -22,13 +22,13 @@ function createWindow() {
   });
 
   // Load app
-  // Dev → local Vite server. Packaged → live Vercel deployment, so the
-  // desktop app always shows the latest version without rebuilding the .exe.
+  // Dev → local Vite server. Packaged → bundled dist/ files, so the app loads
+  // instantly and works fully offline (Firestore serves from local cache).
   if (isDev) {
     win.loadURL("http://localhost:5173");
     win.webContents.openDevTools();
   } else {
-    win.loadURL("https://quantaip-software.vercel.app");
+    win.loadFile(path.join(app.getAppPath(), "dist", "index.html"));
   }
 
   // Show when ready (no white flash)
