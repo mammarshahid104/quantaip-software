@@ -109,6 +109,15 @@ export default function Fees() {
 
       const studentRows = studentsSnap.docs.map((d) => {
         const data = d.data();
+        // Mobile stores discounts as feeType/feeDiscount; mirror them into the
+        // web's discountPercent when the web field is absent, so mobile-set
+        // percentage discounts (scholarship/kinship/full) display here too.
+        let discountPercent = Number(data.discountPercent || 0);
+        if (!discountPercent) {
+          if (data.feeType === "full_scholarship") discountPercent = 100;
+          else if (data.feeType === "scholarship" || data.feeType === "kinship")
+            discountPercent = Number(data.feeDiscount || 0);
+        }
         return {
           id: d.id,
           fullName: data.fullName || data.name || "Unknown",
@@ -116,14 +125,16 @@ export default function Fees() {
           section: data.section || "—",
           rollNo: data.rollNo || "—",
           status: data.status || "active",
-          discountPercent: Number(data.discountPercent || 0),
+          discountPercent,
           discountType: data.discountType || "",
         };
       });
 
       const struct = {};
       structSnap.docs.forEach((d) => {
-        struct[d.id] = Number(d.data().monthlyFee || 0);
+        // Mobile writes `amount`; web historically wrote `monthlyFee`. Read both.
+        const sd = d.data();
+        struct[d.id] = Number(sd.amount ?? sd.monthlyFee ?? 0);
       });
 
       const fees = {};
@@ -250,9 +261,15 @@ export default function Fees() {
     setSavingClass(true);
     try {
       const monthlyFee = Number(editValue || 0);
-      await setDoc(doc(db, `schools/${schoolCode}/feeStructure/${cls}`), {
-        monthlyFee,
-      });
+      await setDoc(
+        doc(db, `schools/${schoolCode}/feeStructure/${cls}`),
+        {
+          amount: monthlyFee, // mobile app reads `amount`
+          monthlyFee, // kept for web back-compat
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
       setFeeStructure((prev) => ({ ...prev, [cls]: monthlyFee }));
       setEditingClass(null);
       setEditValue("");
@@ -957,9 +974,15 @@ function SetDiscountModal({ schoolCode, student, onClose, onSuccess }) {
     }
     setSaving(true);
     try {
+      // Mirror to the mobile app's discount model (feeType/feeDiscount). The
+      // web only does percentage discounts → scholarship (or full scholarship).
+      const feeType =
+        p >= 100 ? "full_scholarship" : p > 0 ? "scholarship" : "standard";
       await updateDoc(doc(db, `schools/${schoolCode}/students/${student.id}`), {
         discountPercent: p,
         discountType: type,
+        feeType, // mobile field
+        feeDiscount: feeType === "scholarship" ? p : 0, // mobile field (percent)
       });
       onSuccess?.(`Discount updated for ${student.fullName}.`);
     } catch (err) {

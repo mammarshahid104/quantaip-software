@@ -105,6 +105,10 @@ export default function AssignHomeworkModal({
         description: form.description.trim(),
         dueDate: form.dueDate,
         assignedBy: form.assignedBy || "—",
+        // Mobile reads `teacherName` and `assignedDate` (YYYY-MM-DD) for the
+        // homework footer; write them alongside the web's own fields.
+        teacherName: form.assignedBy || "",
+        assignedDate: new Date().toISOString().split("T")[0],
         assignedAt: new Date().toISOString(),
         // NOTE: serverTimestamp() cannot be used inside arrayUnion (Firestore
         // forbids sentinels inside arrays), so we store a client timestamp.

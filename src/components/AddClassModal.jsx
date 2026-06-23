@@ -78,6 +78,8 @@ export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
         {
           name,
           section: form.section.trim(),
+          // Mobile (ClassesScreen) stores sections as an array; mirror it.
+          sections: form.section.trim() ? [form.section.trim()] : [],
           classIncharge: teacher?.id || "",
           classInchargeName: teacher?.name || "",
           createdAt: serverTimestamp(),

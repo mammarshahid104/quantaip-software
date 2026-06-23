@@ -616,15 +616,24 @@ export default function Timetable() {
     try {
       const payload = {};
       for (const day of DAYS) {
-        payload[day.full] = (draft[day.full] || []).map((r) => ({
-          period: Number(r.periodNo) || 0,
-          startTime: r.startTime || "",
-          endTime: r.endTime || "",
-          subject: r.isBreak ? "Break" : r.subject || "",
-          teacher: r.isBreak ? "" : r.teacher || "",
-          isBreak: !!r.isBreak,
-          isAssembly: !!r.isAssembly,
-        }));
+        payload[day.full] = (draft[day.full] || []).map((r) => {
+          const startTime = r.startTime || "";
+          const endTime = r.endTime || "";
+          return {
+            period: Number(r.periodNo) || 0,
+            startTime,
+            endTime,
+            // Mobile renders a single `time` string ("8:00 - 8:30").
+            time:
+              startTime && endTime
+                ? `${startTime} - ${endTime}`
+                : startTime || endTime || "",
+            subject: r.isBreak ? "Break" : r.subject || "",
+            teacher: r.isBreak ? "" : r.teacher || "",
+            isBreak: !!r.isBreak,
+            isAssembly: !!r.isAssembly,
+          };
+        });
       }
       await setDoc(
         doc(db, `schools/${schoolCode}/timetable/${selectedClass}`),
