@@ -7,6 +7,7 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import Login from "./pages/Login";
+import SchoolSetup from "./pages/SchoolSetup";
 import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
 import Teachers from "./pages/Teachers";
@@ -25,6 +26,9 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/" element={<Login />} />
+
+        {/* Super-admin school onboarding — standalone, no app login */}
+        <Route path="/setup" element={<SchoolSetup />} />
 
         {/* Protected app shell */}
         <Route
