@@ -2,7 +2,8 @@
 // Reads/writes the same Firestore paths the mobile app uses:
 //   schools/{schoolCode}/feeStructure/{className}            { monthlyFee }
 //   schools/{schoolCode}/fees/{month}/students/{studentId}   payment record
-//   schools/{schoolCode}/students/{studentId}                { discountPercent, discountType }
+//   schools/{schoolCode}/students/{studentId}   { discountPercent, discountAmount,
+//                                                  discountType, feeType, feeDiscount }
 // month format matches the mobile app: "June 2026".
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -33,6 +34,23 @@ const money = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
 // Final fee after a percentage discount.
 const calcFinal = (amount, discountPercent) =>
   Math.round(Number(amount || 0) * (1 - Number(discountPercent || 0) / 100));
+
+// Final fee after a per-student standing discount — supports both a percentage
+// and a fixed-amount (Rs off) discount, mirroring the mobile app's feeType model.
+const applyStudentDiscount = (classFee, d) => {
+  const fee = Number(classFee || 0);
+  if (d.discountMode === "amount")
+    return Math.max(0, fee - Number(d.discountAmount || 0));
+  return calcFinal(fee, d.discountPercent);
+};
+
+// Human-readable label for a student's standing discount.
+const discountLabel = (d) => {
+  if (d.discountMode === "amount" && Number(d.discountAmount) > 0)
+    return `${money(d.discountAmount)} off`;
+  if (Number(d.discountPercent) > 0) return `${d.discountPercent}%`;
+  return "—";
+};
 
 // Month key in the SAME format the mobile app writes with.
 const monthKey = (date) =>
@@ -109,14 +127,19 @@ export default function Fees() {
 
       const studentRows = studentsSnap.docs.map((d) => {
         const data = d.data();
-        // Mobile stores discounts as feeType/feeDiscount; mirror them into the
-        // web's discountPercent when the web field is absent, so mobile-set
-        // percentage discounts (scholarship/kinship/full) display here too.
+        // Unify the discount from either the web fields (discountPercent /
+        // discountAmount) or the mobile app's feeType/feeDiscount model.
+        let discountMode = Number(data.discountAmount) > 0 ? "amount" : "percent";
         let discountPercent = Number(data.discountPercent || 0);
-        if (!discountPercent) {
+        let discountAmount = Number(data.discountAmount || 0);
+        if (!discountPercent && !discountAmount && data.feeType) {
           if (data.feeType === "full_scholarship") discountPercent = 100;
           else if (data.feeType === "scholarship" || data.feeType === "kinship")
             discountPercent = Number(data.feeDiscount || 0);
+          else if (data.feeType === "discount") {
+            discountMode = "amount";
+            discountAmount = Number(data.feeDiscount || 0);
+          }
         }
         return {
           id: d.id,
@@ -125,7 +148,9 @@ export default function Fees() {
           section: data.section || "—",
           rollNo: data.rollNo || "—",
           status: data.status || "active",
+          discountMode,
           discountPercent,
+          discountAmount,
           discountType: data.discountType || "",
         };
       });
@@ -186,6 +211,7 @@ export default function Fees() {
           originalAmount: original,
           discount,
           finalAmount,
+          discountText: discount ? `${discount}%` : "—",
           status: rec.status || "pending",
           paidOn: rec.paidOn || null,
           paymentMethod: rec.paymentMethod || "—",
@@ -193,14 +219,15 @@ export default function Fees() {
           hasRecord: true,
         };
       }
-      // No record this month → expected fee from structure + student discount.
-      const discount = s.discountPercent || 0;
+      // No record this month → expected fee from structure + student discount
+      // (percentage or fixed-amount, matching the mobile app).
       return {
         ...s,
         classFee,
         originalAmount: classFee,
-        discount,
-        finalAmount: calcFinal(classFee, discount),
+        discount: s.discountPercent || 0,
+        finalAmount: applyStudentDiscount(classFee, s),
+        discountText: discountLabel(s),
         status: "pending",
         paidOn: null,
         paymentMethod: "—",
@@ -446,7 +473,7 @@ export default function Fees() {
                         {r.section !== "—" ? ` · ${r.section}` : ""}
                       </td>
                       <td>{money(r.originalAmount)}</td>
-                      <td>{r.discount ? `${r.discount}%` : "—"}</td>
+                      <td>{r.discountText || (r.discount ? `${r.discount}%` : "—")}</td>
                       <td className="cell-strong">{money(r.finalAmount)}</td>
                       <td>
                         <span
@@ -904,7 +931,7 @@ function ViewPaymentModal({ row, month, formatDate, onClose, onSetDiscount }) {
     ["Roll No", row.rollNo],
     ["Month", month],
     ["Fee Amount", money(row.originalAmount)],
-    ["Discount", row.discount ? `${row.discount}%` : "None"],
+    ["Discount", row.discountText && row.discountText !== "—" ? row.discountText : "None"],
     ["Final Amount", money(row.finalAmount)],
     ["Status", paid ? "Paid" : "Pending"],
   ];
@@ -957,8 +984,14 @@ function ViewPaymentModal({ row, month, formatDate, onClose, onSetDiscount }) {
    Set Discount modal — writes to the student profile doc
    ============================================================ */
 function SetDiscountModal({ schoolCode, student, onClose, onSuccess }) {
+  const [mode, setMode] = useState(
+    student.discountMode === "amount" ? "amount" : "percent"
+  );
   const [percent, setPercent] = useState(
     student.discountPercent ? String(student.discountPercent) : "0"
+  );
+  const [amount, setAmount] = useState(
+    student.discountAmount ? String(student.discountAmount) : "0"
   );
   const [type, setType] = useState(student.discountType || "Scholarship");
   const [saving, setSaving] = useState(false);
@@ -968,22 +1001,44 @@ function SetDiscountModal({ schoolCode, student, onClose, onSuccess }) {
     e.preventDefault();
     setError("");
     const p = Number(percent);
-    if (p < 0 || p > 100) {
-      setError("Discount must be between 0 and 100.");
+    const a = Number(amount);
+    if (mode === "percent" && (p < 0 || p > 100)) {
+      setError("Percentage must be between 0 and 100.");
+      return;
+    }
+    if (mode === "amount" && a < 0) {
+      setError("Amount can't be negative.");
       return;
     }
     setSaving(true);
     try {
-      // Mirror to the mobile app's discount model (feeType/feeDiscount). The
-      // web only does percentage discounts → scholarship (or full scholarship).
-      const feeType =
-        p >= 100 ? "full_scholarship" : p > 0 ? "scholarship" : "standard";
-      await updateDoc(doc(db, `schools/${schoolCode}/students/${student.id}`), {
-        discountPercent: p,
-        discountType: type,
-        feeType, // mobile field
-        feeDiscount: feeType === "scholarship" ? p : 0, // mobile field (percent)
-      });
+      // Store the web fields and mirror to the mobile app's discount model
+      // (feeType/feeDiscount). Percentage → scholarship/full_scholarship;
+      // fixed amount → discount (Rs off).
+      let fields;
+      if (mode === "amount") {
+        fields = {
+          discountPercent: 0,
+          discountAmount: a,
+          discountType: type,
+          feeType: a > 0 ? "discount" : "standard", // mobile: fixed Rs off
+          feeDiscount: a, // mobile: amount off
+        };
+      } else {
+        const feeType =
+          p >= 100 ? "full_scholarship" : p > 0 ? "scholarship" : "standard";
+        fields = {
+          discountPercent: p,
+          discountAmount: 0,
+          discountType: type,
+          feeType, // mobile field
+          feeDiscount: feeType === "scholarship" ? p : 0, // mobile: percent
+        };
+      }
+      await updateDoc(
+        doc(db, `schools/${schoolCode}/students/${student.id}`),
+        fields
+      );
       onSuccess?.(`Discount updated for ${student.fullName}.`);
     } catch (err) {
       console.error("Set discount failed:", err);
@@ -1015,18 +1070,45 @@ function SetDiscountModal({ schoolCode, student, onClose, onSuccess }) {
 
             <div className="fee-row-grid">
               <label className="field">
-                <span className="field-label">Discount %</span>
-                <input
+                <span className="field-label">Discount Mode</span>
+                <select
                   className="field-input"
-                  type="number"
-                  min="0"
-                  max="100"
-                  autoFocus
-                  value={percent}
-                  onChange={(e) => setPercent(e.target.value)}
-                  placeholder="0"
-                />
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                >
+                  <option value="percent">Percentage (%)</option>
+                  <option value="amount">Fixed Amount (Rs)</option>
+                </select>
               </label>
+
+              {mode === "percent" ? (
+                <label className="field">
+                  <span className="field-label">Discount %</span>
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="0"
+                    max="100"
+                    autoFocus
+                    value={percent}
+                    onChange={(e) => setPercent(e.target.value)}
+                    placeholder="0"
+                  />
+                </label>
+              ) : (
+                <label className="field">
+                  <span className="field-label">Amount Off (Rs)</span>
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="0"
+                    autoFocus
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                  />
+                </label>
+              )}
 
               <label className="field">
                 <span className="field-label">Discount Type</span>
