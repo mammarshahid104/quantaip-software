@@ -253,12 +253,10 @@ export default function AddTeacherModal({
             </div>
 
             <div className="field">
-              <span className="field-label field-label-incharge">
-                Class Incharge
-              </span>
-              <span className="field-subtext">
+              <h3 className="incharge-heading">Class Incharge</h3>
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 8px" }}>
                 Select classes where this teacher is the class incharge
-              </span>
+              </p>
               {form.classesAssigned.length === 0 ? (
                 <div className="incharge-empty">Assign classes first</div>
               ) : (
