@@ -108,20 +108,26 @@ export default function Dashboard() {
             };
           });
 
-        // Fees collected — sum paid fee documents. Path may differ from the
-        // mobile app; on failure we log and fall back to 0.
+        // Fees collected — sum this month's paid records from the same
+        // subcollection the Fee Management page reads:
+        //   schools/{schoolCode}/fees/{month}/students   (month = "June 2026")
+        const month = new Date().toLocaleString("default", {
+          month: "long",
+          year: "numeric",
+        });
         let feesCollected = 0;
         try {
-          const feesSnap = await getDocs(collection(db, `${base}/fees`));
+          const feesSnap = await getDocs(
+            collection(db, `${base}/fees/${month}/students`)
+          );
           for (const doc of feesSnap.docs) {
             const f = doc.data();
-            const status = String(f.status || "").toLowerCase();
-            if (status === "paid" || f.paidAmount != null) {
-              feesCollected += Number(f.paidAmount ?? f.amount ?? 0) || 0;
+            if (String(f.status || "").toLowerCase() === "paid") {
+              feesCollected += Number(f.amount || 0);
             }
           }
         } catch (feeErr) {
-          console.warn("Fees fetch failed (path may be wrong):", feeErr);
+          console.warn("Fees fetch failed:", feeErr);
         }
 
         if (cancelled) return;
