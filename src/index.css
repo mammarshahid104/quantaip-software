@@ -445,6 +445,92 @@ p {
 .modal-body {
   padding: 24px;
 }
+.modal-subtitle {
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+/* Student detail modal */
+.detail-section {
+  margin-bottom: 20px;
+}
+.detail-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #b8960a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ece5d3;
+  margin-bottom: 12px;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.detail-item .detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.detail-item .detail-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0d1f3c;
+  text-align: left;
+}
+.pwd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pwd-toggle {
+  background: transparent;
+  border: 1px solid #ece5d3;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.pwd-toggle:hover {
+  border-color: #b8960a;
+  color: #b8960a;
+}
+.att-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.att-stat {
+  flex: 1;
+  background: #f8fafc;
+  border: 1px solid #ece5d3;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+.att-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0d1f3c;
+}
+.att-stat-label {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
 
 /* Class detail modal */
 .section-heading {
