@@ -71,6 +71,7 @@ export default function StudentDetailModal({ schoolCode, studentId, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPwd, setShowPwd] = useState(false);
+  const [showStudentPwd, setShowStudentPwd] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,6 +179,21 @@ export default function StudentDetailModal({ schoolCode, studentId, onClose }) {
                 <div className="detail-section-title">🎓 Student Info</div>
                 <div className="detail-grid">
                   <DetailItem label="Student ID">{d.id}</DetailItem>
+                  <div className="detail-item">
+                    <span className="detail-label">Password</span>
+                    <div className="pwd-row">
+                      <span className="detail-value">
+                        {showStudentPwd ? d.password || "—" : "••••••••"}
+                      </span>
+                      <button
+                        type="button"
+                        className="pwd-toggle"
+                        onClick={() => setShowStudentPwd((p) => !p)}
+                      >
+                        {showStudentPwd ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
                   <DetailItem label="Full Name">{d.fullName || "—"}</DetailItem>
                   <DetailItem label="Class">{d.class || "—"}</DetailItem>
                   <DetailItem label="Section">{d.section || "—"}</DetailItem>
