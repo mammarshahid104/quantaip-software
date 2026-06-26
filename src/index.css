@@ -1226,6 +1226,77 @@ p {
   background: rgba(184, 150, 10, 0.08);
 }
 
+/* Class subjects */
+.btn-subjects {
+  background: transparent;
+  border: 1.5px solid #b8960a;
+  color: #b8960a;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-subjects:hover {
+  background: #b8960a;
+  color: white;
+}
+.subject-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+.subject-table th {
+  background: #0d1f3c;
+  color: #d4af37;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.subject-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #ece5d3;
+  color: #1e293b;
+}
+.periods-badge {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0369a1;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.freq-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.freq-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1.5px solid #ece5d3;
+  background: white;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0d1f3c;
+  cursor: pointer;
+}
+.freq-btn.active {
+  background: #0d1f3c;
+  color: #d4af37;
+  border-color: #0d1f3c;
+}
+.field-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
 /* Placeholder pages */
 .placeholder-card {
   text-align: center;

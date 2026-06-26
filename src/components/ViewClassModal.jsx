@@ -20,6 +20,7 @@ function sectionSort(a, b) {
 export default function ViewClassModal({ schoolCode, className, onClose }) {
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [classTeacher, setClassTeacher] = useState("—");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -73,7 +74,8 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
       // (matches the mobile app), fall back to any teacher assigned to the
       // class.
       const classDoc = classesSnap.docs.find((d) => d.id === className);
-      const inchargeName = classDoc?.data()?.classInchargeName;
+      const classData = classDoc?.data() || {};
+      const inchargeName = classData.classInchargeName;
       const resolvedTeacher =
         (inchargeName && inchargeName.trim()) ||
         classTeachers[0]?.name ||
@@ -81,6 +83,7 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
 
       setStudents(classStudents);
       setTeachers(classTeachers);
+      setSubjects(Array.isArray(classData.subjects) ? classData.subjects : []);
       setClassTeacher(resolvedTeacher);
     } catch (err) {
       console.error("Class detail load failed:", err);
@@ -158,6 +161,40 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
                   </div>
                 </div>
               </div>
+
+              {/* A2) Subjects */}
+              <h3 className="section-heading">
+                📚 Subjects{" "}
+                <span className="section-count">({subjects.length})</span>
+              </h3>
+              {subjects.length === 0 ? (
+                <div className="table-state">
+                  No subjects defined yet. Click "📚 Subjects" to add.
+                </div>
+              ) : (
+                <table className="subject-table">
+                  <thead>
+                    <tr>
+                      <th>Subject</th>
+                      <th>Periods/Week</th>
+                      <th>Teacher</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subjects.map((s, i) => (
+                      <tr key={`${s.subject}-${i}`}>
+                        <td className="cell-strong">{s.subject}</td>
+                        <td>
+                          <span className="periods-badge">
+                            {s.periodsPerWeek || 1}x/week
+                          </span>
+                        </td>
+                        <td>{s.teacherName || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
 
               {/* B) Students list */}
               <h3 className="section-heading">

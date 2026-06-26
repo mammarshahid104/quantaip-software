@@ -415,11 +415,16 @@ export default function Timetable() {
         schoolCode,
       });
 
+      // generateTimetable returns { timetable, warning }; tolerate the older
+      // day-keyed shape too.
+      const timetable = result?.timetable || result;
+      const warning = result?.warning || "";
+
       // Load the AI result into the editor draft (all days).
       const d = {};
       for (const day of DAYS) {
         d[day.full] = toRows(
-          Array.isArray(result[day.full]) ? result[day.full] : []
+          Array.isArray(timetable[day.full]) ? timetable[day.full] : []
         );
       }
       setDraft(d);
@@ -428,7 +433,9 @@ export default function Timetable() {
       // Count this successful generation toward the monthly limit.
       setUsage(recordAiGeneration(schoolCode));
       showSuccess(
-        "✨ AI generated clash-free timetable! Review and save when ready."
+        warning
+          ? `⚠️ ${warning}`
+          : "✨ AI generated clash-free timetable! Review and save when ready."
       );
     } catch (err) {
       setAiError(err.message || "AI generation failed. Please try again.");

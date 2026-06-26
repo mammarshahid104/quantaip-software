@@ -8,6 +8,7 @@ import { db } from "../firebase/config";
 import AddClassModal from "../components/AddClassModal";
 import ViewClassModal from "../components/ViewClassModal";
 import EditInchargeModal from "../components/EditInchargeModal";
+import ManageSubjectsModal from "../components/ManageSubjectsModal";
 
 // Order: Nursery, Prep, KG, then Grade 1..12, unknowns last.
 const NAMED_RANK = {
@@ -43,6 +44,7 @@ export default function Classes() {
   const [showAdd, setShowAdd] = useState(false);
   const [viewClass, setViewClass] = useState(null);
   const [editInchargeClass, setEditInchargeClass] = useState(null);
+  const [manageSubjects, setManageSubjects] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,6 +226,12 @@ export default function Classes() {
                         View
                       </button>
                       <button
+                        className="btn-subjects"
+                        onClick={() => setManageSubjects(c.name)}
+                      >
+                        📚 Subjects
+                      </button>
+                      <button
                         className="btn-edit"
                         onClick={() => setEditInchargeClass(c.name)}
                       >
@@ -259,6 +267,15 @@ export default function Classes() {
           schoolCode={schoolCode}
           className={editInchargeClass}
           onClose={() => setEditInchargeClass(null)}
+          onSuccess={handleSuccess}
+        />
+      )}
+
+      {manageSubjects && (
+        <ManageSubjectsModal
+          schoolCode={schoolCode}
+          className={manageSubjects}
+          onClose={() => setManageSubjects(null)}
           onSuccess={handleSuccess}
         />
       )}
