@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import AddTeacherModal from "../components/AddTeacherModal";
+import TeacherDetailModal from "../components/TeacherDetailModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportExcelModal from "../components/ImportExcelModal";
 import { exportTeachers } from "../services/excelExport";
@@ -22,6 +23,7 @@ export default function Teachers() {
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editTeacher, setEditTeacher] = useState(null);
+  const [viewTeacher, setViewTeacher] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [success, setSuccess] = useState("");
@@ -237,6 +239,12 @@ export default function Teachers() {
                   <td>
                     <div className="action-btns">
                       <button
+                        className="btn-view"
+                        onClick={() => setViewTeacher(t.id)}
+                      >
+                        View
+                      </button>
+                      <button
                         className="btn-edit"
                         onClick={() =>
                           setEditTeacher({ id: t.id, ...t.raw })
@@ -258,6 +266,14 @@ export default function Teachers() {
           </table>
         )}
       </div>
+
+      {viewTeacher && (
+        <TeacherDetailModal
+          schoolCode={schoolCode}
+          teacherId={viewTeacher}
+          onClose={() => setViewTeacher(null)}
+        />
+      )}
 
       {(showModal || editTeacher) && (
         <AddTeacherModal

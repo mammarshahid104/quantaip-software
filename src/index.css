@@ -531,6 +531,26 @@ p {
   color: #94a3b8;
   margin-top: 2px;
 }
+.class-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.class-chip {
+  background: #f0f4ff;
+  border: 1px solid #c7d7f5;
+  color: #0d1f3c;
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.class-chip.incharge {
+  background: #fffdf0;
+  border: 1px solid #d4af37;
+  color: #b8960a;
+}
 
 /* Class detail modal */
 .section-heading {
