@@ -412,6 +412,7 @@ export default function Timetable() {
             }
           : null,
         className: selectedClass,
+        schoolCode,
       });
 
       // Load the AI result into the editor draft (all days).

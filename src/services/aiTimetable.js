@@ -6,10 +6,56 @@
 // acceptable only for a trusted/internal admin audience. For a public or
 // multi-tenant deployment, move this call behind a backend (e.g. a Firebase
 // Cloud Function) so the key never reaches the browser.
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase/config";
+
 const API_URL = "https://api.openai.com/v1/chat/completions";
 const MODEL = "gpt-4o-mini";
 
-function buildPrompt(params) {
+// Fetch every other class's saved timetable and collapse it into a map of
+// teachers who are already occupied per day + time slot:
+//   { "Monday": { "08:00-08:40": ["Ms. Ayesha (Grade 9)", ...] } }
+// The selected class is skipped so we don't clash a teacher with themselves.
+async function buildTeacherBusyMap(schoolCode, selectedClass) {
+  const busyMap = {};
+  if (!schoolCode) return busyMap;
+
+  const snap = await getDocs(
+    collection(db, `schools/${schoolCode}/timetable`)
+  );
+  snap.docs.forEach((docSnap) => {
+    const className = docSnap.id;
+    if (className === selectedClass) return;
+    const data = docSnap.data() || {};
+    Object.entries(data).forEach(([day, periods]) => {
+      if (!Array.isArray(periods)) return;
+      periods.forEach((period) => {
+        if (!period || period.isBreak || period.isAssembly || !period.teacher) {
+          return;
+        }
+        const timeKey = `${period.startTime}-${period.endTime}`;
+        if (!busyMap[day]) busyMap[day] = {};
+        if (!busyMap[day][timeKey]) busyMap[day][timeKey] = [];
+        busyMap[day][timeKey].push(`${period.teacher} (${className})`);
+      });
+    });
+  });
+  return busyMap;
+}
+
+// Flatten the busy map into human-readable lines for the prompt.
+function formatBusyMap(busyMap) {
+  return Object.entries(busyMap)
+    .map(([day, slots]) =>
+      Object.entries(slots)
+        .map(([time, teachers]) => `${day} ${time}: ${teachers.join(", ")}`)
+        .join("\n")
+    )
+    .filter((block) => block.length > 0)
+    .join("\n");
+}
+
+function buildPrompt(params, busyText) {
   const {
     subjects,
     teachers,
@@ -34,11 +80,18 @@ function buildPrompt(params) {
     )
     .join("\n");
 
+  const busySection = busyText
+    ? `\nIMPORTANT — Teachers already busy in OTHER classes (DO NOT assign them at these times):
+${busyText}
+
+Never assign any of the teachers listed above to the same day + time slot — it would create a cross-class clash.\n`
+    : "";
+
   return `You are a school timetable expert. Generate a clash-free weekly timetable for ${className}.
 
 TEACHERS AND SUBJECTS:
 ${teacherLines}
-
+${busySection}
 REQUIREMENTS:
 - Class: ${className}
 - Periods per day: ${periods}
@@ -93,6 +146,19 @@ export async function generateTimetable(params) {
     );
   }
 
+  // Gather teachers already occupied in other classes so the AI can avoid
+  // cross-class clashes. A read failure here shouldn't block generation.
+  let busyText = "";
+  try {
+    const busyMap = await buildTeacherBusyMap(
+      params.schoolCode,
+      params.className
+    );
+    busyText = formatBusyMap(busyMap);
+  } catch (err) {
+    console.error("Couldn't load existing timetables for clash check:", err);
+  }
+
   const response = await fetch(API_URL, {
     method: "POST",
     headers: {
@@ -101,7 +167,7 @@ export async function generateTimetable(params) {
     },
     body: JSON.stringify({
       model: MODEL,
-      messages: [{ role: "user", content: buildPrompt(params) }],
+      messages: [{ role: "user", content: buildPrompt(params, busyText) }],
       max_tokens: 4000,
     }),
   });
