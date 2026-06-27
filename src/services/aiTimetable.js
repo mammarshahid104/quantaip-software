@@ -71,6 +71,41 @@ function formatBusyMap(busyMap) {
     .join("\n");
 }
 
+// Safety net: the model occasionally ignores the busy constraint, so after
+// parsing we walk every assigned period and clear any teacher who is already
+// busy in another class at that day + time. Mutates the timetable in place.
+function removeClashes(timetable, busyMap) {
+  let clashesFixed = 0;
+
+  Object.entries(timetable).forEach(([day, periods]) => {
+    if (!Array.isArray(periods)) return;
+
+    periods.forEach((period) => {
+      if (!period || !period.teacher || period.isBreak || period.isAssembly) {
+        return;
+      }
+
+      const timeKey = `${period.startTime}-${period.endTime}`;
+      const busyTeachers = busyMap[day]?.[timeKey] || [];
+
+      // busyTeachers entries look like "Ms. Ayesha (Grade 9)" — match on name.
+      const isBusy = busyTeachers.some((entry) =>
+        entry.toLowerCase().includes(period.teacher.toLowerCase())
+      );
+
+      if (isBusy) {
+        console.warn(`Clash fixed: ${period.teacher} on ${day} ${timeKey}`);
+        period.teacher = ""; // clear the busy teacher; admin reassigns manually
+        period.clashWarning = true;
+        clashesFixed += 1;
+      }
+    });
+  });
+
+  console.log(`Auto-fixed ${clashesFixed} clashes`);
+  return { timetable, clashesFixed };
+}
+
 function buildPrompt(params, busyText) {
   const {
     subjects,
@@ -134,16 +169,21 @@ Subjects needed: ${subjects.join(", ")}`;
   }
 
   const busySection = busyText
-    ? `\nIMPORTANT — Teachers already busy in OTHER classes (DO NOT assign them at these times):
+    ? `
+⚠️ CRITICAL HARD CONSTRAINT ⚠️
+The following teachers are ALREADY TEACHING other classes at these times.
+You MUST NOT assign them at these times. This is NON-NEGOTIABLE:
+
 ${busyText}
 
-Never assign any of the teachers listed above to the same day + time slot — it would create a cross-class clash.\n`
+Any timetable that violates the above will be REJECTED and regenerated.
+`
     : "";
 
   return `You are a school timetable expert. Generate a clash-free weekly timetable for ${className}.
-
-${subjectsSection}
 ${busySection}
+${subjectsSection}
+
 REQUIREMENTS:
 - Class: ${className}
 - Periods per day: ${periods}
@@ -204,19 +244,13 @@ export async function generateTimetable(params) {
     params.schoolCode,
     params.className
   );
-  const warning =
-    classSubjects.length === 0
-      ? "No subjects defined for this class. Used teacher subjects as a fallback — add subjects via '📚 Subjects' for a class-appropriate timetable."
-      : "";
 
   // Gather teachers already occupied in other classes so the AI can avoid
   // cross-class clashes. A read failure here shouldn't block generation.
+  let busyMap = {};
   let busyText = "";
   try {
-    const busyMap = await buildTeacherBusyMap(
-      params.schoolCode,
-      params.className
-    );
+    busyMap = await buildTeacherBusyMap(params.schoolCode, params.className);
     busyText = formatBusyMap(busyMap);
   } catch (err) {
     console.error("Couldn't load existing timetables for clash check:", err);
@@ -263,5 +297,20 @@ export async function generateTimetable(params) {
   } catch {
     throw new Error("Couldn't parse the AI's timetable. Please try again.");
   }
-  return { timetable, warning };
+
+  // Safety net: clear any teacher the model assigned despite being busy
+  // elsewhere. Highlighted slots (clashWarning) are for the admin to reassign.
+  const { timetable: fixedTimetable, clashesFixed } = removeClashes(
+    timetable,
+    busyMap
+  );
+
+  const warning =
+    clashesFixed > 0
+      ? `${clashesFixed} teacher clash(es) were auto-fixed. Please assign teachers manually for the highlighted slots.`
+      : classSubjects.length === 0
+      ? "No subjects defined for this class. Used teacher subjects as a fallback — add subjects via '📚 Subjects' for a class-appropriate timetable."
+      : "";
+
+  return { timetable: fixedTimetable, warning };
 }
