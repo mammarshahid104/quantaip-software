@@ -209,6 +209,8 @@ export default function Timetable() {
   const [usage, setUsage] = useState(() => getAiUsage(schoolCode));
 
   // Label/state for the "AI Generate" button based on current usage.
+  // Retained while AI generation is temporarily disabled (see toolbar button).
+  // eslint-disable-next-line no-unused-vars
   const aiButton = useMemo(() => {
     if (usage.monthlyReached) {
       return {
@@ -335,6 +337,8 @@ export default function Timetable() {
   };
 
   // ----- AI generator -----
+  // Retained while AI generation is temporarily disabled (see toolbar button).
+  // eslint-disable-next-line no-unused-vars
   const openAiModal = () => {
     const fresh = getAiUsage(schoolCode);
     setUsage(fresh);
@@ -740,17 +744,17 @@ export default function Timetable() {
         {editMode && !loading && (
           <>
             <div className="editor-toolbar">
+              {/* AI generation temporarily disabled while being upgraded. */}
               <button
-                className="btn-ai"
-                onClick={openAiModal}
-                disabled={aiButton.disabled}
-                title={
-                  aiButton.disabled
-                    ? "AI generation is currently unavailable"
-                    : "Generate a clash-free timetable with AI"
+                className="btn-ai btn-ai-disabled"
+                onClick={() =>
+                  alert(
+                    "AI Timetable Generator is being upgraded. Manual timetable entry is available."
+                  )
                 }
+                title="AI Timetable — Coming Soon!"
               >
-                {aiButton.label}
+                🤖 AI Generate — Coming Soon
               </button>
               <button className="btn-edit" onClick={loadTemplate}>
                 📋 Load Template

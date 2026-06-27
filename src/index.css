@@ -879,6 +879,10 @@ p {
   box-shadow: none;
   cursor: not-allowed;
 }
+.btn-ai-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* AI usage / cooldown status bar (under the editor toolbar) */
 .ai-usage-bar {
