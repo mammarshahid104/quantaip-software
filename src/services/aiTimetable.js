@@ -10,7 +10,7 @@ import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 
 const API_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL = "gpt-4o-mini";
+const MODEL = "gpt-4o";
 
 // Read the class's own subject list (subject + weekly frequency + teacher).
 // Returns [] when the class has none defined, so the caller can fall back.
@@ -168,43 +168,53 @@ Subjects needed: ${subjects.join(", ")}`;
    - Distribute subjects evenly — avoid the same subject twice in one day`;
   }
 
-  const busySection = busyText
-    ? `
-⚠️ CRITICAL HARD CONSTRAINT ⚠️
-The following teachers are ALREADY TEACHING other classes at these times.
-You MUST NOT assign them at these times. This is NON-NEGOTIABLE:
+  return `You are an expert school timetable scheduler for ${className}.
+Solve this as a constraint satisfaction puzzle.
 
+STEP 1 - TEACHER AVAILABILITY:
+First, map out when each teacher is FREE (not busy in other classes):
+
+${
+  busyText
+    ? `ALREADY BUSY (HARD CONSTRAINT):
 ${busyText}
 
-Any timetable that violates the above will be REJECTED and regenerated.
-`
-    : "";
+So these teachers are ONLY available at times NOT listed above. This is NON-NEGOTIABLE.`
+    : "All teachers are fully available."
+}
 
-  return `You are a school timetable expert. Generate a clash-free weekly timetable for ${className}.
-${busySection}
+STEP 2 - CLASS SUBJECTS TO SCHEDULE:
 ${subjectsSection}
 
-REQUIREMENTS:
-- Class: ${className}
+STEP 3 - SOLVE THE PUZZLE:
+For each subject:
+- Check which time slots the teacher is FREE (not in the busy list above)
+- Assign the subject ONLY to free slots
+- Distribute across the week according to its weekly frequency
+- Never put the same subject twice in one day (unless its frequency requires it)
+- Physics/Math/Science → morning periods
+- Urdu/Islamiyat/Pakistan Studies → afternoon periods
+${subjectRules}
+
+STEP 4 - VERIFY before responding:
+Check every period you assigned:
+- Is this teacher FREE at this time (not in the busy list)?
+- Does each subject's frequency match its requirement?
+- No same subject twice in one day?
+Only respond if ALL checks pass!
+
+SCHEDULE PARAMETERS:
+- Days: ${days.join(", ")}
 - Periods per day: ${periods}
 - School starts: ${startTime}
 - Period duration: ${duration} minutes
-- Break after: ${breakAfter}th period (${breakDuration} min)
+- Break after the ${breakAfter}th period (${breakDuration} min)
 ${
   assembly
     ? `- Assembly/Zero period: ${assembly.duration} min before school (label: ${assembly.label})`
     : ""
 }
-- Days: ${days.join(", ")}
-
-STRICT RULES:
-1. No teacher can teach two classes at the same time
-2. Each subject's weekly frequency must be respected — no subject may exceed its weekly limit
-${subjectRules}
-3. Place core/science subjects in earlier periods (better focus)
-4. Break must be included on all days
-5. Friday should have fewer periods (Jummah prayer)
-6. Avoid scheduling the same subject twice in one day unless its weekly frequency requires it
+- Friday should have fewer periods (Jummah prayer)
 
 RESPOND WITH VALID JSON ONLY. No explanation. Format:
 {
@@ -270,7 +280,8 @@ export async function generateTimetable(params) {
           content: buildPrompt({ ...params, classSubjects }, busyText),
         },
       ],
-      max_tokens: 4000,
+      max_tokens: 6000,
+      temperature: 0,
     }),
   });
 
