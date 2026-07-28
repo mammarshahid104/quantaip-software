@@ -9,13 +9,7 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
-
-const CLASSES = [
-  "Nursery",
-  "Prep",
-  "KG",
-  ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
-];
+import { useClasses, NO_CLASSES_MESSAGE } from "../services/classes";
 
 // Today as YYYY-MM-DD (local) for the date input's min + default.
 function todayStr() {
@@ -34,9 +28,16 @@ export default function AssignHomeworkModal({
 }) {
   const today = todayStr();
 
+  // Class options come from schools/{schoolCode}/classes — never a fixed list.
+  const {
+    classes,
+    loading: classesLoading,
+    empty: noClasses,
+  } = useClasses(schoolCode);
+
   const [teachers, setTeachers] = useState([]); // [{ name, subject }]
   const [form, setForm] = useState({
-    className: defaultClass && CLASSES.includes(defaultClass) ? defaultClass : "Nursery",
+    className: defaultClass || "",
     subject: "",
     title: "",
     description: "",
@@ -47,6 +48,9 @@ export default function AssignHomeworkModal({
   const [error, setError] = useState("");
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Nothing picked yet → fall back to the first class once the list arrives.
+  const className = form.className || classes[0] || "";
 
   // Load teachers to populate the Subject + Assigned By dropdowns.
   useEffect(() => {
@@ -87,6 +91,10 @@ export default function AssignHomeworkModal({
     e.preventDefault();
     setError("");
 
+    if (!className) {
+      setError("Please select a class.");
+      return;
+    }
     if (!form.subject.trim()) {
       setError("Please select a subject.");
       return;
@@ -116,12 +124,12 @@ export default function AssignHomeworkModal({
       };
 
       await setDoc(
-        doc(db, `schools/${schoolCode}/homework/${form.className}`),
+        doc(db, `schools/${schoolCode}/homework/${className}`),
         { items: arrayUnion(item) },
         { merge: true }
       );
 
-      onSuccess?.(`Homework assigned to ${form.className} successfully!`);
+      onSuccess?.(`Homework assigned to ${className} successfully!`);
       onClose?.();
     } catch (err) {
       console.error("Assign homework failed:", err);
@@ -152,15 +160,22 @@ export default function AssignHomeworkModal({
               <span className="field-label">Class *</span>
               <select
                 className="field-input"
-                value={form.className}
+                value={className}
                 onChange={(e) => update("className", e.target.value)}
+                disabled={classesLoading || noClasses}
               >
-                {CLASSES.map((c) => (
+                <option value="">
+                  {classesLoading ? "Loading classes…" : "Select class…"}
+                </option>
+                {classes.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
               </select>
+              {noClasses && (
+                <span className="field-hint">⚠️ {NO_CLASSES_MESSAGE}</span>
+              )}
             </label>
 
             <label className="field">

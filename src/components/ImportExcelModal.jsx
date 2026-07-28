@@ -1,8 +1,10 @@
-// Excel import modal — parses the mobile app's format and writes to Firestore.
-//   Students: one sheet per class (sheet name = class), "Teachers" sheet skipped.
-//   Teachers: the "Teachers" sheet only.
+// Excel import modal — parses the simplified templates and writes to Firestore.
+//   Students: Full Name | Class | Section | Roll No. | Father Name | Parents Phone
+//   Teachers: Full Name | Subject | Class Assigned | Phone No.
+// Every "Class" value is validated against schools/{schoolCode}/classes; rows
+// naming an unknown class are flagged and skipped, but never block the import.
 // Props: type ("students" | "teachers"), schoolCode, onClose, onSuccess
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   collection,
   doc,
@@ -16,6 +18,7 @@ import {
   downloadStudentTemplate,
   downloadTeacherTemplate,
 } from "../services/excelExport";
+import { useClasses, matchClass, NO_CLASSES_MESSAGE } from "../services/classes";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -30,6 +33,16 @@ function nextNumberFrom(docs) {
 const firstNameOf = (name) => String(name).trim().split(/\s+/)[0] || "";
 const rand4 = () => Math.floor(1000 + Math.random() * 9000);
 
+// First non-empty value among the accepted header spellings.
+function pick(row, ...headers) {
+  for (const h of headers) {
+    const v = row[h];
+    if (v !== undefined && v !== null && String(v).trim() !== "")
+      return String(v).trim();
+  }
+  return "";
+}
+
 export default function ImportExcelModal({
   type,
   schoolCode,
@@ -38,46 +51,61 @@ export default function ImportExcelModal({
 }) {
   const isStudents = type === "students";
 
+  // Valid class names for this school — the import is checked against these.
+  const {
+    classes,
+    loading: classesLoading,
+    empty: noClasses,
+  } = useClasses(schoolCode);
+
   const [fileName, setFileName] = useState("");
-  const [parsed, setParsed] = useState(null); // { rows, classes? }
+  const [parsed, setParsed] = useState(null); // { rows }
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
 
+  // Sheets carry the class name too (older exports had one sheet per class),
+  // so a missing "Class" column still resolves.
   const parseStudents = (wb) => {
     const sheets = wb.SheetNames.filter((n) => n.toLowerCase() !== "teachers");
     const rows = [];
     sheets.forEach((sheetName) => {
       const sheetRows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
-      sheetRows.forEach((r) => {
+      sheetRows.forEach((r, i) => {
         rows.push({
+          rowNo: i + 2, // +1 for the header row, +1 for 1-based numbering
           sheet: sheetName,
-          name: String(r["Name"] || r["name"] || "").trim(),
-          cls: sheetName,
-          fatherName: r["Father Name"] || "",
-          section: r["Section"] || "A",
-          rollNo: String(r["Roll No"] || ""),
-          parentPhone: r["Parent Phone"] || "",
+          name: pick(r, "Full Name", "Name", "name"),
+          cls:
+            pick(r, "Class", "class") ||
+            (sheetName.toLowerCase() === "students" ? "" : sheetName),
+          section: pick(r, "Section", "section") || "A",
+          rollNo: pick(r, "Roll No.", "Roll No", "Roll Number"),
+          fatherName: pick(r, "Father Name", "Fathers Name"),
+          parentPhone: pick(r, "Parents Phone", "Parent Phone", "Phone"),
         });
       });
     });
-    const classCount = new Set(rows.map((r) => r.sheet)).size;
-    setParsed({ rows, classes: classCount });
+    setParsed({ rows });
   };
 
   const parseTeachers = (wb) => {
-    const name = wb.SheetNames.find((n) => n.toLowerCase() === "teachers");
+    // Prefer a "Teachers" sheet; otherwise take the first one.
+    const name =
+      wb.SheetNames.find((n) => n.toLowerCase() === "teachers") ||
+      wb.SheetNames[0];
     if (!name) {
-      setError('No "Teachers" sheet found in this file.');
+      setError("This file has no sheets to import.");
       setParsed(null);
       return;
     }
     const sheetRows = XLSX.utils.sheet_to_json(wb.Sheets[name]);
-    const rows = sheetRows.map((r) => ({
-      name: String(r["Name"] || r["name"] || "").trim(),
-      subject: r["Subject"] || "",
-      phone: String(r["Phone"] || ""),
-      classesAssigned: String(r["Classes Assigned"] || "")
+    const rows = sheetRows.map((r, i) => ({
+      rowNo: i + 2,
+      name: pick(r, "Full Name", "Name", "name"),
+      subject: pick(r, "Subject", "subject"),
+      phone: pick(r, "Phone No.", "Phone No", "Phone", "phone"),
+      classesAssigned: pick(r, "Class Assigned", "Classes Assigned")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
@@ -102,10 +130,59 @@ export default function ImportExcelModal({
     }
   };
 
-  const missingNames = parsed
-    ? parsed.rows.filter((r) => !r.name).length
-    : 0;
-  const validRows = parsed ? parsed.rows.filter((r) => r.name) : [];
+  // Resolve each row's class against the school's classes and collect warnings.
+  // Students with an unknown class are skipped; teachers keep the classes that
+  // do exist and are imported either way.
+  const checked = useMemo(() => {
+    if (!parsed) return { rows: [], warnings: [], skipped: 0 };
+    const warnings = [];
+    let skipped = 0;
+
+    const rows = parsed.rows.map((r) => {
+      if (!r.name) {
+        skipped += 1;
+        warnings.push(`⚠️ Row ${r.rowNo}: no name — skipped`);
+        return { ...r, skip: true };
+      }
+
+      if (isStudents) {
+        if (!r.cls) {
+          skipped += 1;
+          warnings.push(`⚠️ Row ${r.rowNo}: no class given — skipped`);
+          return { ...r, skip: true };
+        }
+        const match = matchClass(classes, r.cls);
+        if (!match) {
+          skipped += 1;
+          warnings.push(
+            `⚠️ Row ${r.rowNo}: Class "${r.cls}" not found — add it first or fix the spreadsheet`
+          );
+          return { ...r, skip: true };
+        }
+        return { ...r, cls: match, skip: false };
+      }
+
+      const resolved = [];
+      const unknown = [];
+      r.classesAssigned.forEach((c) => {
+        const match = matchClass(classes, c);
+        if (match) resolved.push(match);
+        else unknown.push(c);
+      });
+      if (unknown.length) {
+        warnings.push(
+          `⚠️ Row ${r.rowNo}: Class ${unknown
+            .map((c) => `"${c}"`)
+            .join(", ")} not found — add it first or fix the spreadsheet`
+        );
+      }
+      return { ...r, classesAssigned: resolved, skip: false };
+    });
+
+    return { rows, warnings, skipped };
+  }, [parsed, classes, isStudents]);
+
+  const validRows = checked.rows.filter((r) => !r.skip);
 
   const doImport = async () => {
     if (!validRows.length) return;
@@ -216,17 +293,29 @@ export default function ImportExcelModal({
               <p className="page-subtitle" style={{ marginTop: 10 }}>
                 {isStudents ? (
                   <>
-                    Each sheet = one class (e.g. &quot;Grade 10&quot;). A
-                    &quot;Teachers&quot; sheet is ignored here. Fill the data and
-                    upload below.
+                    Columns: Full Name · Class · Section · Roll No. · Father
+                    Name · Parents Phone. Fill the data and upload below.
                   </>
                 ) : (
                   <>
-                    Put all teachers on a single &quot;Teachers&quot; sheet.
-                    Classes Assigned is comma-separated. Fill and upload below.
+                    Columns: Full Name · Subject · Class Assigned · Phone No.
+                    Class Assigned is comma-separated. Fill and upload below.
                   </>
                 )}
               </p>
+              {!classesLoading &&
+                (noClasses ? (
+                  <div
+                    className="warn-banner"
+                    style={{ margin: "10px 0 0", fontSize: 13 }}
+                  >
+                    ⚠️ {NO_CLASSES_MESSAGE}
+                  </div>
+                ) : (
+                  <p className="field-hint">
+                    Valid classes: {classes.join(", ")}
+                  </p>
+                ))}
             </div>
 
             {/* Step 2 — Upload */}
@@ -250,18 +339,25 @@ export default function ImportExcelModal({
               <div className="import-step">
                 <div className="import-step-title">3 · Preview</div>
                 <p className="page-subtitle">
-                  {isStudents
-                    ? `Found ${parsed.classes} class${
-                        parsed.classes === 1 ? "" : "es"
-                      }, ${validRows.length} students total.`
-                    : `Found ${validRows.length} teachers.`}
+                  {`Ready to import ${validRows.length} ${
+                    isStudents ? "students" : "teachers"
+                  }${
+                    checked.skipped
+                      ? ` · ${checked.skipped} row(s) will be skipped`
+                      : ""
+                  }.`}
                 </p>
-                {missingNames > 0 && (
+                {checked.warnings.length > 0 && (
                   <div
-                    className="login-error"
-                    style={{ margin: "8px 0", padding: "8px 10px" }}
+                    className="warn-banner"
+                    style={{ margin: "8px 0", fontSize: 13, fontWeight: 500 }}
                   >
-                    ⚠️ {missingNames} row(s) have no name and will be skipped.
+                    {checked.warnings.slice(0, 10).map((w, i) => (
+                      <div key={i}>{w}</div>
+                    ))}
+                    {checked.warnings.length > 10 && (
+                      <div>…and {checked.warnings.length - 10} more.</div>
+                    )}
                   </div>
                 )}
 
@@ -270,17 +366,17 @@ export default function ImportExcelModal({
                     <thead>
                       {isStudents ? (
                         <tr>
-                          <th>Sheet</th>
-                          <th>Name</th>
+                          <th>Full Name</th>
                           <th>Class</th>
                           <th>Section</th>
+                          <th>Roll No.</th>
                         </tr>
                       ) : (
                         <tr>
-                          <th>Name</th>
+                          <th>Full Name</th>
                           <th>Subject</th>
-                          <th>Phone</th>
-                          <th>Classes</th>
+                          <th>Class Assigned</th>
+                          <th>Phone No.</th>
                         </tr>
                       )}
                     </thead>
@@ -288,17 +384,17 @@ export default function ImportExcelModal({
                       {previewRows.map((r, i) =>
                         isStudents ? (
                           <tr key={i}>
-                            <td>{r.sheet}</td>
                             <td>{r.name}</td>
                             <td>{r.cls}</td>
                             <td>{r.section}</td>
+                            <td>{r.rollNo}</td>
                           </tr>
                         ) : (
                           <tr key={i}>
                             <td>{r.name}</td>
                             <td>{r.subject}</td>
-                            <td>{r.phone}</td>
                             <td>{r.classesAssigned.join(", ")}</td>
+                            <td>{r.phone}</td>
                           </tr>
                         )
                       )}
@@ -335,7 +431,7 @@ export default function ImportExcelModal({
             type="button"
             className="btn-primary"
             onClick={doImport}
-            disabled={importing || validRows.length === 0}
+            disabled={importing || classesLoading || validRows.length === 0}
           >
             {importing
               ? `Importing… ${progress.done}/${progress.total}`

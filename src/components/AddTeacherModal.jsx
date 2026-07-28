@@ -10,6 +10,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { useClasses, NO_CLASSES_MESSAGE, classSort } from "../services/classes";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -21,13 +22,6 @@ function nextNumberFrom(docs) {
   return max + 1;
 }
 
-const CLASSES = [
-  "Nursery",
-  "Prep",
-  "KG",
-  ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
-];
-
 const firstNameOf = (name) => name.trim().split(/\s+/)[0] || "";
 
 export default function AddTeacherModal({
@@ -37,6 +31,13 @@ export default function AddTeacherModal({
   onSuccess,
 }) {
   const isEdit = !!teacher;
+
+  // Class checkboxes come from schools/{schoolCode}/classes — never a fixed list.
+  const {
+    classes,
+    loading: classesLoading,
+    empty: noClasses,
+  } = useClasses(schoolCode);
 
   const randomNum = useMemo(
     () => Math.floor(1000 + Math.random() * 9000),
@@ -62,6 +63,13 @@ export default function AddTeacherModal({
   const [originalIncharge, setOriginalIncharge] = useState([]);
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Keep already-assigned classes checkable even if they were later removed
+  // from the classes collection.
+  const classOptions = useMemo(() => {
+    const extras = form.classesAssigned.filter((c) => !classes.includes(c));
+    return extras.length ? [...classes, ...extras].sort(classSort) : classes;
+  }, [classes, form.classesAssigned]);
 
   // On edit, load which classes already have this teacher as incharge
   // (class.classIncharge === teacher.id), to pre-check the boxes.
@@ -237,19 +245,25 @@ export default function AddTeacherModal({
             </label>
 
             <div className="field">
-              <span className="field-label">Classes Assigned</span>
-              <div className="checkbox-grid">
-                {CLASSES.map((c) => (
-                  <label className="checkbox-item" key={c}>
-                    <input
-                      type="checkbox"
-                      checked={form.classesAssigned.includes(c)}
-                      onChange={() => toggleClass(c)}
-                    />
-                    {c}
-                  </label>
-                ))}
-              </div>
+              <span className="field-label">Class Assigned</span>
+              {classesLoading ? (
+                <div className="incharge-empty">Loading classes…</div>
+              ) : noClasses ? (
+                <div className="incharge-empty">⚠️ {NO_CLASSES_MESSAGE}</div>
+              ) : (
+                <div className="checkbox-grid">
+                  {classOptions.map((c) => (
+                    <label className="checkbox-item" key={c}>
+                      <input
+                        type="checkbox"
+                        checked={form.classesAssigned.includes(c)}
+                        onChange={() => toggleClass(c)}
+                      />
+                      {c}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="field">

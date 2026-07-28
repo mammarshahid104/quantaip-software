@@ -8,6 +8,7 @@ import {
   recordAiGeneration,
   MONTHLY_LIMIT,
 } from "../services/aiUsageLimit";
+import { useClasses, classSort } from "../services/classes";
 
 // Rotating status messages shown while the AI generates.
 const AI_MESSAGES = [
@@ -16,36 +17,6 @@ const AI_MESSAGES = [
   "Eliminating clashes...",
   "Optimizing subject distribution...",
 ];
-
-const CLASSES = [
-  "Nursery",
-  "Prep",
-  "KG",
-  ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
-];
-
-// Class ordering: Nursery → Prep → KG → Grade 1..12, unknowns last.
-const NAMED_RANK = {
-  "pre-nursery": -4,
-  prenursery: -4,
-  nursery: -3,
-  prep: -2,
-  kg: -1,
-  kindergarten: -1,
-};
-function classRank(name) {
-  const key = String(name).toLowerCase().trim();
-  if (key in NAMED_RANK) return NAMED_RANK[key];
-  const m = key.match(/(\d+)/);
-  if (m) return parseInt(m[1], 10);
-  return 999;
-}
-function classSort(a, b) {
-  const ra = classRank(a);
-  const rb = classRank(b);
-  if (ra !== rb) return ra - rb;
-  return String(a).localeCompare(String(b));
-}
 
 const DAYS = [
   { short: "Mon", full: "Monday" },
@@ -160,6 +131,9 @@ const cloneRows = (rows) => rows.map((r) => ({ ...r }));
 
 export default function Timetable() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
+
+  // Class list from schools/{schoolCode}/classes — never a fixed list.
+  const { classes: definedClasses } = useClasses(schoolCode);
 
   const [docs, setDocs] = useState({}); // className -> data
   const [teachers, setTeachers] = useState([]);
@@ -291,11 +265,11 @@ export default function Timetable() {
     };
   }, [schoolCode]);
 
-  // Class chips: standard classes plus any existing timetable docs.
+  // Class chips: the school's defined classes plus any existing timetable docs.
   const classes = useMemo(() => {
-    const set = new Set([...CLASSES, ...Object.keys(docs)]);
+    const set = new Set([...definedClasses, ...Object.keys(docs)]);
     return Array.from(set).sort(classSort);
-  }, [docs]);
+  }, [definedClasses, docs]);
 
   useEffect(() => {
     if (!selectedClass && classes.length > 0) setSelectedClass(classes[0]);

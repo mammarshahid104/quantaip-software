@@ -7,6 +7,7 @@ import TeacherDetailModal from "../components/TeacherDetailModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportExcelModal from "../components/ImportExcelModal";
 import { exportTeachers } from "../services/excelExport";
+import { useClasses, classSort } from "../services/classes";
 
 function teacherName(d) {
   return d.fullName || d.name || "Unknown";
@@ -15,11 +16,19 @@ function teacherName(d) {
 export default function Teachers() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
 
+  // Class filter options come from schools/{schoolCode}/classes.
+  const {
+    classes,
+    empty: noClasses,
+    reload: reloadClasses,
+  } = useClasses(schoolCode);
+
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [subject, setSubject] = useState("All Subjects");
+  const [classFilter, setClassFilter] = useState("All Classes");
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editTeacher, setEditTeacher] = useState(null);
@@ -41,6 +50,11 @@ export default function Teachers() {
           id: doc.id,
           name: teacherName(d),
           subject: d.subject || "—",
+          classesAssigned: Array.isArray(d.classesAssigned)
+            ? d.classesAssigned
+            : d.classesAssigned
+            ? [d.classesAssigned]
+            : [],
           classAssigned: Array.isArray(d.classesAssigned)
             ? d.classesAssigned.join(", ")
             : d.classesAssigned || "—",
@@ -69,6 +83,7 @@ export default function Teachers() {
   const handleSuccess = (message) => {
     setSuccess(message);
     load();
+    reloadClasses();
     setTimeout(() => setSuccess(""), 4000);
   };
 
@@ -107,16 +122,27 @@ export default function Teachers() {
     return ["All Subjects", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [teachers]);
 
-  // Apply search + subject filter.
+  // Filter options: the school's defined classes, plus any class already on a
+  // teacher record so nobody becomes unfilterable.
+  const classOptions = useMemo(() => {
+    const set = new Set(classes);
+    teachers.forEach((t) => t.classesAssigned.forEach((c) => c && set.add(c)));
+    return ["All Classes", ...Array.from(set).sort(classSort)];
+  }, [classes, teachers]);
+
+  // Apply search + subject + class filters.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return teachers.filter((t) => {
       const matchesSearch = !q || t.name.toLowerCase().includes(q);
       const matchesSubject =
         subject === "All Subjects" || t.subject === subject;
-      return matchesSearch && matchesSubject;
+      const matchesClass =
+        classFilter === "All Classes" ||
+        t.classesAssigned.includes(classFilter);
+      return matchesSearch && matchesSubject && matchesClass;
     });
-  }, [teachers, search, subject]);
+  }, [teachers, search, subject, classFilter]);
 
   return (
     <div className="page">
@@ -151,7 +177,16 @@ export default function Teachers() {
           >
             📥 Export Excel
           </button>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
+          <button
+            className="btn-primary"
+            onClick={() => setShowModal(true)}
+            disabled={noClasses}
+            title={
+              noClasses
+                ? "Add classes from the Classes tab before adding teachers."
+                : undefined
+            }
+          >
             + Add Teacher
           </button>
         </div>
@@ -159,6 +194,12 @@ export default function Teachers() {
 
       {success && <div className="success-banner">{success}</div>}
       {error && <div className="login-error">{error}</div>}
+      {noClasses && (
+        <div className="warn-banner">
+          ⚠️ No classes defined yet. Add classes from the{" "}
+          <strong>Classes</strong> tab before adding teachers.
+        </div>
+      )}
 
       {/* Toolbar: search + subject filter */}
       <div className="toolbar">
@@ -180,6 +221,17 @@ export default function Teachers() {
           {subjects.map((s) => (
             <option key={s} value={s}>
               {s}
+            </option>
+          ))}
+        </select>
+        <select
+          className="filter-select"
+          value={classFilter}
+          onChange={(e) => setClassFilter(e.target.value)}
+        >
+          {classOptions.map((c) => (
+            <option key={c} value={c}>
+              {c}
             </option>
           ))}
         </select>

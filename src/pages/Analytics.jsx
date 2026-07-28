@@ -2,26 +2,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, getCountFromServer } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { classRank } from "../services/classes";
 
 function studentName(d) {
   return d.fullName || d.name || "Unknown";
-}
-
-// Class ordering: Nursery → Prep → KG → Grade 1..12, unknowns last.
-const NAMED_RANK = {
-  "pre-nursery": -4,
-  prenursery: -4,
-  nursery: -3,
-  prep: -2,
-  kg: -1,
-  kindergarten: -1,
-};
-function classRank(name) {
-  const key = String(name).toLowerCase().trim();
-  if (key in NAMED_RANK) return NAMED_RANK[key];
-  const m = key.match(/(\d+)/);
-  if (m) return parseInt(m[1], 10);
-  return 999;
 }
 
 // Tally present/total across an entire attendanceMap.

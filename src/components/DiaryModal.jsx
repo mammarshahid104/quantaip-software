@@ -1,13 +1,7 @@
 // Daily Diary generator modal — pick class/date/school, then export a PDF.
 import { useState } from "react";
 import { generateDiary } from "../services/generateDiary";
-
-const CLASSES = [
-  "Nursery",
-  "Prep",
-  "KG",
-  ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
-];
+import { useClasses, NO_CLASSES_MESSAGE } from "../services/classes";
 
 function todayStr() {
   const d = new Date();
@@ -23,9 +17,15 @@ export default function DiaryModal({
   onClose,
   onSuccess,
 }) {
+  // Class options come from schools/{schoolCode}/classes — never a fixed list.
+  const {
+    classes,
+    loading: classesLoading,
+    empty: noClasses,
+  } = useClasses(schoolCode);
+
   const [form, setForm] = useState({
-    className:
-      defaultClass && CLASSES.includes(defaultClass) ? defaultClass : "Nursery",
+    className: defaultClass || "",
     date: todayStr(),
     schoolName: localStorage.getItem("schoolName") || "Green Hills School",
   });
@@ -34,11 +34,14 @@ export default function DiaryModal({
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
+  // Nothing picked yet → fall back to the first class once the list arrives.
+  const className = form.className || classes[0] || "";
+
   const handleGenerate = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!form.className || !form.date || !form.schoolName.trim()) {
+    if (!className || !form.date || !form.schoolName.trim()) {
       setError("Please fill in all fields.");
       return;
     }
@@ -47,11 +50,11 @@ export default function DiaryModal({
     try {
       await generateDiary({
         schoolCode,
-        className: form.className,
+        className,
         date: form.date,
         schoolName: form.schoolName.trim(),
       });
-      onSuccess?.(`Diary generated for ${form.className}.`);
+      onSuccess?.(`Diary generated for ${className}.`);
       onClose?.();
     } catch (err) {
       console.error("Generate diary failed:", err);
@@ -82,15 +85,22 @@ export default function DiaryModal({
               <span className="field-label">Class *</span>
               <select
                 className="field-input"
-                value={form.className}
+                value={className}
                 onChange={(e) => update("className", e.target.value)}
+                disabled={classesLoading || noClasses}
               >
-                {CLASSES.map((c) => (
+                <option value="">
+                  {classesLoading ? "Loading classes…" : "Select class…"}
+                </option>
+                {classes.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
               </select>
+              {noClasses && (
+                <span className="field-hint">⚠️ {NO_CLASSES_MESSAGE}</span>
+              )}
             </label>
 
             <label className="field">

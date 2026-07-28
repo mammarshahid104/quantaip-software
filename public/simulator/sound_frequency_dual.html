@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QUANTAIP Simulator — Two-Tone Sound & Beat Frequency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-deep:#060c1c; --navy:#0b1530; --navy-panel:#101c3d; --navy-line:#1e2c54;
+    --gold:#d4af37; --gold-soft:#e8cf7a; --text:#eef1fb; --text-dim:#8a93b8;
+    --good:#5fd0a3; --red:#e0715f; --blue:#6fa8dc;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: radial-gradient(1200px 600px at 15% -10%, #12234f 0%, transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, #14183a 0%, transparent 55%), var(--navy-deep);
+    color:var(--text); font-family:'Poppins',sans-serif; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; padding:28px 16px 60px;
+  }
+  .header{ width:100%; max-width:1100px; display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom:26px; flex-wrap:wrap; gap:8px; border-bottom:1px solid var(--navy-line); padding-bottom:18px; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .mark{ font-weight:700; letter-spacing:0.14em; font-size:13px; color:var(--gold); text-transform:uppercase; }
+  .brand .name{ font-weight:300; font-size:22px; letter-spacing:0.01em; }
+  .brand .name b{ font-weight:600; color:var(--gold-soft); }
+  .exp-label{ font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-dim); letter-spacing:0.08em; }
+
+  .top{ width:100%; max-width:1100px; }
+  #stage{ width:100%; aspect-ratio:16/6; border-radius:10px; background:linear-gradient(180deg, #0a1330 0%, #060c1c 100%); display:block; border:1px solid var(--navy-line); margin-bottom:18px; }
+
+  .readouts{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:22px; }
+  .readout{ background:var(--navy-panel); border:1px solid var(--navy-line); border-radius:8px; padding:10px 12px; }
+  .readout .lbl{ font-size:10px; color:var(--text-dim); letter-spacing:0.08em; text-transform:uppercase; }
+  .readout .val{ font-family:'JetBrains Mono',monospace; font-size:15px; color:var(--gold-soft); margin-top:4px; }
+  .readout .val.blue{ color:var(--blue); }
+  .readout .val.good{ color:var(--good); }
+
+  .dual-layout{ width:100%; max-width:1100px; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:820px){ .dual-layout{ grid-template-columns:1fr; } }
+
+  .panel{ background:linear-gradient(180deg, var(--navy-panel), var(--navy)); border:1px solid var(--navy-line); border-radius:14px; padding:18px; }
+  .panel.toneA{ border-top:3px solid var(--gold); }
+  .panel.toneB{ border-top:3px solid var(--blue); }
+  .panel h2{ margin:0 0 14px; font-size:12px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); display:flex; justify-content:space-between; align-items:center; }
+  .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+  .dot.gold{ background:var(--gold); }
+  .dot.blue{ background:var(--blue); }
+
+  .field{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .field label{ display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-dim); }
+  .field label span.v{ font-family:'JetBrains Mono',monospace; color:var(--gold-soft); }
+  .toneB .field label span.v{ color:var(--blue); }
+  input[type=range]{ -webkit-appearance:none; width:100%; height:4px; border-radius:2px; background:var(--navy-line); outline:none; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--gold); cursor:pointer; border:2px solid var(--navy-deep); }
+  .toneB input[type=range]::-webkit-slider-thumb{ background:var(--blue); }
+  input[type=number]{
+    background:var(--navy-deep); border:1px solid var(--navy-line); color:var(--gold-soft);
+    font-family:'JetBrains Mono',monospace; font-size:13px; padding:7px 9px; border-radius:6px; width:100%; margin-top:4px;
+  }
+  .toneB input[type=number]{ color:var(--blue); }
+
+  .wave-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .wave-btn{
+    font-family:'JetBrains Mono',monospace; font-size:10px; text-align:center;
+    padding:8px 2px; border-radius:6px; border:1px solid var(--navy-line);
+    background:var(--navy-deep); color:var(--text-dim); cursor:pointer;
+  }
+  .wave-btn.active{ background:var(--gold); color:#191204; border-color:var(--gold); font-weight:600; }
+  .toneB .wave-btn.active{ background:var(--blue); color:#0a1128; border-color:var(--blue); }
+
+  .preset-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:14px; }
+  .preset-btn{
+    font-family:'JetBrains Mono',monospace; font-size:9.5px; text-align:center;
+    padding:6px 2px; border-radius:5px; border:1px solid var(--navy-line);
+    background:var(--navy-deep); color:var(--text-dim); cursor:pointer;
+  }
+  .preset-btn:hover{ color:var(--gold-soft); border-color:var(--gold); }
+
+  button.play-btn{
+    width:100%; font-family:'Poppins',sans-serif; font-weight:600; font-size:13px;
+    padding:11px 14px; border-radius:8px; border:none; cursor:pointer;
+    background:linear-gradient(180deg, var(--gold-soft), var(--gold)); color:#191204;
+  }
+  .toneB button.play-btn{ background:linear-gradient(180deg, #9cc2ea, var(--blue)); color:#0a1128; }
+  button.play-btn.playing{ background:linear-gradient(180deg, #f19a8c, var(--red)) !important; color:#191204 !important; }
+
+  .safety{ font-size:11px; color:var(--red); margin-top:14px; line-height:1.5; }
+  .note{ font-size:11.5px; color:var(--text-dim); line-height:1.6; margin-top:14px; border-top:1px solid var(--navy-line); padding-top:14px; max-width:1100px; }
+  .note b{ color:var(--gold-soft); font-weight:600; }
+  footer{ margin-top:20px; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-dim); letter-spacing:0.06em; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">
+    <span class="mark">QUANTAIP</span>
+    <span class="name">Simulator — <b>Sound &amp; Waves Lab</b></span>
+  </div>
+  <div class="exp-label">EXPERIMENT / TWO-TONE SOUND &amp; BEAT FREQUENCY</div>
+</div>
+
+<div class="top">
+  <canvas id="stage" width="1000" height="380"></canvas>
+  <div class="readouts">
+    <div class="readout"><div class="lbl">Tone A</div><div class="val" id="rFreqA">440 Hz</div></div>
+    <div class="readout"><div class="lbl">Tone B</div><div class="val blue" id="rFreqB">440 Hz</div></div>
+    <div class="readout"><div class="lbl">Beat Frequency |fA−fB|</div><div class="val good" id="rBeat">0.0 Hz</div></div>
+    <div class="readout"><div class="lbl">Beats heard per second</div><div class="val good" id="rBeatDesc">no beating</div></div>
+  </div>
+</div>
+
+<div class="dual-layout">
+
+  <div class="panel toneA">
+    <h2><span><span class="dot gold"></span>Tone A</span></h2>
+
+    <div class="field">
+      <label>Frequency <span class="v" id="vFreqA">440 Hz</span></label>
+      <input type="range" id="freqSliderA" min="1" max="22000" step="1" value="440">
+      <input type="number" id="freqNumberA" min="1" max="22000" step="1" value="440">
+    </div>
+
+    <div class="field">
+      <label>Waveform</label>
+      <div class="wave-grid">
+        <div class="wave-btn active" data-wave="sine">Sine</div>
+        <div class="wave-btn" data-wave="square">Square</div>
+        <div class="wave-btn" data-wave="sawtooth">Saw</div>
+        <div class="wave-btn" data-wave="triangle">Tri</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Volume <span class="v" id="vVolA">15%</span></label>
+      <input type="range" id="volSliderA" min="0" max="60" step="1" value="15">
+    </div>
+
+    <div class="preset-grid">
+      <div class="preset-btn" data-f="256">256 Hz</div>
+      <div class="preset-btn" data-f="440">440 Hz</div>
+      <div class="preset-btn" data-f="1000">1000 Hz</div>
+    </div>
+
+    <button class="play-btn" id="playBtnA">▶ Play Tone A</button>
+  </div>
+
+  <div class="panel toneB">
+    <h2><span><span class="dot blue"></span>Tone B</span></h2>
+
+    <div class="field">
+      <label>Frequency <span class="v" id="vFreqB">440 Hz</span></label>
+      <input type="range" id="freqSliderB" min="1" max="22000" step="1" value="440">
+      <input type="number" id="freqNumberB" min="1" max="22000" step="1" value="440">
+    </div>
+
+    <div class="field">
+      <label>Waveform</label>
+      <div class="wave-grid">
+        <div class="wave-btn active" data-wave="sine">Sine</div>
+        <div class="wave-btn" data-wave="square">Square</div>
+        <div class="wave-btn" data-wave="sawtooth">Saw</div>
+        <div class="wave-btn" data-wave="triangle">Tri</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Volume <span class="v" id="vVolB">15%</span></label>
+      <input type="range" id="volSliderB" min="0" max="60" step="1" value="15">
+    </div>
+
+    <div class="preset-grid">
+      <div class="preset-btn" data-f="256">256 Hz</div>
+      <div class="preset-btn" data-f="444">444 Hz</div>
+      <div class="preset-btn" data-f="450">450 Hz</div>
+    </div>
+
+    <button class="play-btn" id="playBtnB">▶ Play Tone B</button>
+  </div>
+
+</div>
+
+<div class="safety">⚠ Human hearing range is roughly 20 Hz – 20,000 Hz (varies by age). Start with headphones/speakers at low volume, especially above 10 kHz, and when playing two tones together.</div>
+
+<div class="note">
+  When two tones play together, you hear a single pulsing loudness at the <b>beat frequency = |fA − fB|</b>. Try Tone A at 440 Hz and Tone B at 444 Hz — you'll hear a clear "wah-wah-wah" 4 times a second. Set both to the exact same frequency and the beating disappears (0 Hz). This is how musicians tune instruments by ear.
+</div>
+
+<footer>QUANTAIP EDUOS · VIRTUAL LAB MODULE · PROTOTYPE BUILD</footer>
+
+<script>
+(function(){
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  function makeChannel(prefix, color){
+    return {
+      freqSlider: document.getElementById('freqSlider'+prefix),
+      freqNumber: document.getElementById('freqNumber'+prefix),
+      volSlider: document.getElementById('volSlider'+prefix),
+      vFreq: document.getElementById('vFreq'+prefix),
+      vVol: document.getElementById('vVol'+prefix),
+      rFreq: document.getElementById('rFreq'+prefix),
+      playBtn: document.getElementById('playBtn'+prefix),
+      waveButtons: document.querySelectorAll('.tone'+prefix+' .wave-btn'),
+      presetButtons: document.querySelectorAll('.tone'+prefix+' .preset-btn'),
+      frequency: 440,
+      waveform: 'sine',
+      volume: 0.15,
+      playing: false,
+      audioCtx: null, oscillator: null, gainNode: null, analyser: null,
+      dataArray: null, bufferLength: 0,
+      color: color
+    };
+  }
+
+  const A = makeChannel('A', '#e8cf7a');
+  const B = makeChannel('B', '#6fa8dc');
+
+  const rBeat = document.getElementById('rBeat');
+  const rBeatDesc = document.getElementById('rBeatDesc');
+
+  function setFrequency(ch, f){
+    ch.frequency = Math.max(1, Math.min(22000, f));
+    ch.freqSlider.value = ch.frequency;
+    ch.freqNumber.value = Math.round(ch.frequency);
+    ch.vFreq.textContent = ch.frequency.toFixed(ch.frequency<100?1:0)+' Hz';
+    ch.rFreq.textContent = ch.frequency.toFixed(ch.frequency<100?1:0)+' Hz';
+    if (ch.oscillator){ ch.oscillator.frequency.setValueAtTime(ch.frequency, ch.audioCtx.currentTime); }
+    updateBeat();
+  }
+
+  function updateBeat(){
+    const beat = Math.abs(A.frequency - B.frequency);
+    rBeat.textContent = beat.toFixed(1)+' Hz';
+    if (beat < 0.5) rBeatDesc.textContent = 'in tune — no beating';
+    else if (beat <= 10) rBeatDesc.textContent = beat.toFixed(1)+' pulses/sec (audible wah-wah)';
+    else if (beat <= 30) rBeatDesc.textContent = 'fast flutter';
+    else rBeatDesc.textContent = 'too fast to hear as beats';
+  }
+
+  function wireChannel(ch){
+    ch.freqSlider.addEventListener('input', ()=> setFrequency(ch, parseFloat(ch.freqSlider.value)));
+    ch.freqNumber.addEventListener('input', ()=> setFrequency(ch, parseFloat(ch.freqNumber.value)||1));
+    ch.volSlider.addEventListener('input', ()=>{
+      ch.volume = parseFloat(ch.volSlider.value)/100;
+      ch.vVol.textContent = ch.volSlider.value+'%';
+      if (ch.gainNode){ ch.gainNode.gain.setValueAtTime(ch.volume*0.3, ch.audioCtx.currentTime); }
+    });
+    ch.waveButtons.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        ch.waveButtons.forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        ch.waveform = btn.dataset.wave;
+        if (ch.oscillator){ ch.oscillator.type = ch.waveform; }
+      });
+    });
+    ch.presetButtons.forEach(btn=>{
+      btn.addEventListener('click', ()=> setFrequency(ch, parseFloat(btn.dataset.f)));
+    });
+
+    ch.playBtn.addEventListener('click', ()=>{
+      if (ch.playing) stopChannel(ch); else startChannel(ch);
+    });
+  }
+
+  function startChannel(ch){
+    ch.audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    ch.oscillator = ch.audioCtx.createOscillator();
+    ch.gainNode = ch.audioCtx.createGain();
+    ch.analyser = ch.audioCtx.createAnalyser();
+    ch.analyser.fftSize = 2048;
+    ch.bufferLength = ch.analyser.frequencyBinCount;
+    ch.dataArray = new Uint8Array(ch.bufferLength);
+
+    ch.oscillator.type = ch.waveform;
+    ch.oscillator.frequency.setValueAtTime(ch.frequency, ch.audioCtx.currentTime);
+    ch.gainNode.gain.setValueAtTime(ch.volume*0.3, ch.audioCtx.currentTime);
+
+    ch.oscillator.connect(ch.gainNode);
+    ch.gainNode.connect(ch.analyser);
+    ch.analyser.connect(ch.audioCtx.destination);
+    ch.oscillator.start();
+    ch.playing = true;
+    ch.playBtn.textContent = '■ Stop Tone';
+    ch.playBtn.classList.add('playing');
+  }
+
+  function stopChannel(ch){
+    if (ch.oscillator){ ch.oscillator.stop(); ch.oscillator.disconnect(); ch.oscillator=null; }
+    if (ch.audioCtx){ ch.audioCtx.close(); ch.audioCtx=null; }
+    ch.playing = false;
+    ch.playBtn.textContent = ch===A ? '▶ Play Tone A' : '▶ Play Tone B';
+    ch.playBtn.classList.remove('playing');
+  }
+
+  wireChannel(A);
+  wireChannel(B);
+
+  function drawWavePreview(ch, yOffset, ampScale){
+    ctx.strokeStyle = ch.color;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = ch.playing ? 1 : 0.35;
+    ctx.beginPath();
+
+    if (ch.playing && ch.analyser){
+      ch.analyser.getByteTimeDomainData(ch.dataArray);
+      const sliceWidth = W / ch.bufferLength;
+      let x = 0;
+      for(let i=0;i<ch.bufferLength;i++){
+        const v = (ch.dataArray[i]-128)/128.0;
+        const y = yOffset - v*ampScale;
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        x += sliceWidth;
+      }
+    } else {
+      const cycles = 6;
+      for(let x=0;x<W;x++){
+        const phase = (x/W)*cycles*2*Math.PI;
+        let y;
+        if (ch.waveform==='sine') y = Math.sin(phase);
+        else if (ch.waveform==='square') y = Math.sign(Math.sin(phase));
+        else if (ch.waveform==='sawtooth') y = 2*((phase/(2*Math.PI))%1) - 1;
+        else if (ch.waveform==='triangle') y = 2*Math.abs(2*((phase/(2*Math.PI)+0.25)%1)-1)-1;
+        const py = yOffset - y*ampScale;
+        if (x===0) ctx.moveTo(x,py); else ctx.lineTo(x,py);
+      }
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCombined(){
+    // simple additive preview (not audio-accurate, just illustrative) when both playing
+    if (!(A.playing && B.playing)) return;
+    ctx.strokeStyle = 'rgba(95,208,163,0.8)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    const yOffset = H*0.82;
+    const amp = 26;
+    const cycles = 6;
+    for(let x=0;x<W;x++){
+      const t = x/W;
+      const phaseA = t*cycles*2*Math.PI*(A.frequency/Math.max(A.frequency,B.frequency,1));
+      const phaseB = t*cycles*2*Math.PI*(B.frequency/Math.max(A.frequency,B.frequency,1));
+      const y = (Math.sin(phaseA*8)+Math.sin(phaseB*8))/2;
+      const py = yOffset - y*amp;
+      if (x===0) ctx.moveTo(x,py); else ctx.lineTo(x,py);
+    }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(95,208,163,0.7)';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillText('Combined envelope (illustrative)', 14, yOffset-32);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // center lines
+    ctx.strokeStyle = 'rgba(138,147,184,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0,H*0.28); ctx.lineTo(W,H*0.28); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,H*0.55); ctx.lineTo(W,H*0.55); ctx.stroke();
+
+    ctx.fillStyle = 'rgba(232,207,122,0.7)';
+    ctx.font = '11px JetBrains Mono, monospace';
+    ctx.fillText('Tone A', 14, H*0.28-58);
+    ctx.fillStyle = 'rgba(111,168,220,0.7)';
+    ctx.fillText('Tone B', 14, H*0.55-58);
+
+    drawWavePreview(A, H*0.28, 50);
+    drawWavePreview(B, H*0.55, 50);
+    drawCombined();
+  }
+
+  function loop(){
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  setFrequency(A, 440);
+  setFrequency(B, 440);
+  loop();
+})();
+</script>
+</body>
+</html>

@@ -1,10 +1,24 @@
 // Excel export + template generation.
-// Format matches the mobile app exactly:
-//   Students → one sheet per class, columns:
-//     Name | Father Name | Section | Roll No | Parent Phone
-//   Teachers → single "Teachers" sheet, columns:
-//     Name | Subject | Phone | Classes Assigned (comma-separated)
+// Deliberately minimal — one flat sheet per entity, and exactly these columns:
+//   Students → Full Name | Class | Section | Roll No. | Father Name | Parents Phone
+//   Teachers → Full Name | Subject | Class Assigned | Phone No.
 import * as XLSX from "xlsx";
+
+export const STUDENT_COLUMNS = [
+  "Full Name",
+  "Class",
+  "Section",
+  "Roll No.",
+  "Father Name",
+  "Parents Phone",
+];
+
+export const TEACHER_COLUMNS = [
+  "Full Name",
+  "Subject",
+  "Class Assigned",
+  "Phone No.",
+];
 
 // "June 2026" → "June2026" for use in filenames.
 function monthTag() {
@@ -13,114 +27,88 @@ function monthTag() {
     .replace(/\s+/g, "");
 }
 
-// ---- Students: multi-sheet, one sheet per class ----
+// Write `rows` under a fixed header order, so the sheet always has every
+// column even when the data is empty.
+function sheetWithColumns(rows, columns) {
+  return rows.length
+    ? XLSX.utils.json_to_sheet(rows, { header: columns })
+    : XLSX.utils.aoa_to_sheet([columns]);
+}
+
+function studentRow(s) {
+  return {
+    "Full Name": s.name || s.fullName || "",
+    Class: s.grade || s.class || "",
+    Section: s.section || "",
+    "Roll No.": s.rollNo || "",
+    "Father Name": s.fatherName || "",
+    "Parents Phone": s.parentPhone || "",
+  };
+}
+
+function teacherRow(t) {
+  return {
+    "Full Name": t.name || t.fullName || "",
+    Subject: t.subject || "",
+    "Class Assigned": Array.isArray(t.classesAssigned)
+      ? t.classesAssigned.join(", ")
+      : t.classesAssigned || "",
+    "Phone No.": t.phone || "",
+  };
+}
+
+// ---- Students: single "Students" sheet ----
 export function exportStudents(students, schoolCode) {
+  const ws = sheetWithColumns(students.map(studentRow), STUDENT_COLUMNS);
   const wb = XLSX.utils.book_new();
-
-  const byClass = {};
-  students.forEach((s) => {
-    const cls = s.grade || s.class || "Unknown";
-    if (!byClass[cls]) byClass[cls] = [];
-    byClass[cls].push({
-      Name: s.name || s.fullName || "",
-      "Father Name": s.fatherName || "",
-      Section: s.section || "",
-      "Roll No": s.rollNo || "",
-      "Parent Phone": s.parentPhone || "",
-    });
-  });
-
-  const classes = Object.keys(byClass);
-  if (classes.length === 0) {
-    // Nothing to export — still produce a valid file with headers.
-    const ws = XLSX.utils.aoa_to_sheet([
-      ["Name", "Father Name", "Section", "Roll No", "Parent Phone"],
-    ]);
-    XLSX.utils.book_append_sheet(wb, ws, "Students");
-  } else {
-    classes.forEach((cls) => {
-      const ws = XLSX.utils.json_to_sheet(byClass[cls]);
-      // Sheet names are capped at 31 chars by Excel.
-      XLSX.utils.book_append_sheet(wb, ws, String(cls).slice(0, 31));
-    });
-  }
+  XLSX.utils.book_append_sheet(wb, ws, "Students");
 
   XLSX.writeFile(wb, `Students_${schoolCode}_${monthTag()}.xlsx`);
 }
 
-// ---- Teachers: single sheet ----
+// ---- Teachers: single "Teachers" sheet ----
 export function exportTeachers(teachers, schoolCode) {
-  const data = teachers.map((t) => ({
-    Name: t.name || "",
-    Subject: t.subject || "",
-    Phone: t.phone || "",
-    "Classes Assigned": Array.isArray(t.classesAssigned)
-      ? t.classesAssigned.join(", ")
-      : t.classesAssigned || "",
-  }));
-
-  const ws = XLSX.utils.json_to_sheet(
-    data.length
-      ? data
-      : [{ Name: "", Subject: "", Phone: "", "Classes Assigned": "" }]
-  );
+  const ws = sheetWithColumns(teachers.map(teacherRow), TEACHER_COLUMNS);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Teachers");
 
   XLSX.writeFile(wb, `Teachers_${schoolCode}_${monthTag()}.xlsx`);
 }
 
-// ---- Student import template (multi-sheet, with example data) ----
+// ---- Student import template (one example row) ----
 export function downloadStudentTemplate() {
+  const ws = sheetWithColumns(
+    [
+      {
+        "Full Name": "Ahmed Ali",
+        Class: "Grade 10",
+        Section: "A",
+        "Roll No.": "001",
+        "Father Name": "Muhammad Ali",
+        "Parents Phone": "0300-1234567",
+      },
+    ],
+    STUDENT_COLUMNS
+  );
   const wb = XLSX.utils.book_new();
-
-  const grade10 = XLSX.utils.json_to_sheet([
-    {
-      Name: "Ahmed Ali",
-      "Father Name": "Muhammad Ali",
-      Section: "A",
-      "Roll No": "001",
-      "Parent Phone": "0300-1234567",
-    },
-    {
-      Name: "Sara Khan",
-      "Father Name": "Khan Muhammad",
-      Section: "A",
-      "Roll No": "002",
-      "Parent Phone": "0301-1234567",
-    },
-  ]);
-  XLSX.utils.book_append_sheet(wb, grade10, "Grade 10");
-
-  // Empty class sheet — headers only.
-  const grade11 = XLSX.utils.aoa_to_sheet([
-    ["Name", "Father Name", "Section", "Roll No", "Parent Phone"],
-  ]);
-  XLSX.utils.book_append_sheet(wb, grade11, "Grade 11");
-
-  const teachers = XLSX.utils.json_to_sheet([
-    {
-      Name: "Ms. Ayesha",
-      Subject: "Physics",
-      Phone: "0300-1111111",
-      "Classes Assigned": "Grade 10, Grade 11",
-    },
-  ]);
-  XLSX.utils.book_append_sheet(wb, teachers, "Teachers");
+  XLSX.utils.book_append_sheet(wb, ws, "Students");
 
   XLSX.writeFile(wb, "Student_Import_Template.xlsx");
 }
 
-// ---- Teacher import template (single sheet) ----
+// ---- Teacher import template (one example row) ----
 export function downloadTeacherTemplate() {
-  const ws = XLSX.utils.json_to_sheet([
-    {
-      Name: "Ms. Ayesha",
-      Subject: "Physics",
-      Phone: "0300-1111111",
-      "Classes Assigned": "Grade 10, Grade 11, Grade 12",
-    },
-  ]);
+  const ws = sheetWithColumns(
+    [
+      {
+        "Full Name": "Ms. Ayesha",
+        Subject: "Physics",
+        "Class Assigned": "Grade 10, Grade 11",
+        "Phone No.": "0300-1111111",
+      },
+    ],
+    TEACHER_COLUMNS
+  );
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Teachers");
 

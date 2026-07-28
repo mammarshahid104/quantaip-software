@@ -31,6 +31,10 @@ const NAV_GROUPS = [
     items: [{ label: "Analytics", to: "/analytics", icon: "📉" }],
   },
   {
+    title: "LEARNING",
+    items: [{ label: "Virtual Lab", to: "/virtual-lab", icon: "🧪" }],
+  },
+  {
     title: "SYSTEM",
     items: [{ label: "Settings", to: "/settings", icon: "⚙️" }],
   },

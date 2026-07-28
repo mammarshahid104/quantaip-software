@@ -2,32 +2,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { useClasses, classSort } from "../services/classes";
 
 function studentName(d) {
   return d.fullName || d.name || "Unknown";
-}
-
-// Class ordering: Nursery → Prep → KG → Grade 1..12, unknowns last.
-const NAMED_RANK = {
-  "pre-nursery": -4,
-  prenursery: -4,
-  nursery: -3,
-  prep: -2,
-  kg: -1,
-  kindergarten: -1,
-};
-function classRank(name) {
-  const key = String(name).toLowerCase().trim();
-  if (key in NAMED_RANK) return NAMED_RANK[key];
-  const m = key.match(/(\d+)/);
-  if (m) return parseInt(m[1], 10);
-  return 999;
-}
-function classSort(a, b) {
-  const ra = classRank(a);
-  const rb = classRank(b);
-  if (ra !== rb) return ra - rb;
-  return String(a).localeCompare(String(b));
 }
 
 // Pull obtained/total out of a marksMap entry, whatever its shape.
@@ -71,6 +49,9 @@ function statusFor(pct) {
 
 export default function Results() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
+
+  // Class list from schools/{schoolCode}/classes — never a fixed list.
+  const { classes: definedClasses } = useClasses(schoolCode);
 
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,13 +100,14 @@ export default function Results() {
     };
   }, [schoolCode]);
 
-  // Unique classes for chips.
+  // Chips: the school's defined classes plus any class already on a student.
   const classes = useMemo(() => {
-    const set = new Set(
-      students.map((s) => s.cls).filter((c) => c && c !== "—")
-    );
+    const set = new Set(definedClasses);
+    students.forEach((s) => {
+      if (s.cls && s.cls !== "—") set.add(s.cls);
+    });
     return Array.from(set).sort(classSort);
-  }, [students]);
+  }, [definedClasses, students]);
 
   // Unique test IDs across all marksMaps.
   const tests = useMemo(() => {

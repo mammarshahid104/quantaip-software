@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QUANTAIP Simulator — Lab Menu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-deep:#060c1c;
+    --navy:#0b1530;
+    --navy-panel:#101c3d;
+    --navy-line:#1e2c54;
+    --gold:#d4af37;
+    --gold-soft:#e8cf7a;
+    --text:#eef1fb;
+    --text-dim:#8a93b8;
+    --good:#5fd0a3;
+    --locked:#4a5378;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #12234f 0%, transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, #14183a 0%, transparent 55%),
+      var(--navy-deep);
+    color:var(--text);
+    font-family:'Poppins',sans-serif;
+    min-height:100vh;
+  }
+
+  /* ---------- Shell chrome ---------- */
+  .shell{
+    max-width:1100px;
+    margin:0 auto;
+    padding:28px 16px 60px;
+  }
+  .header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:24px;
+    flex-wrap:wrap;
+    gap:10px;
+    border-bottom:1px solid var(--navy-line);
+    padding-bottom:18px;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .mark{
+    font-weight:700; letter-spacing:0.14em; font-size:13px;
+    color:var(--gold); text-transform:uppercase;
+  }
+  .brand .name{ font-weight:300; font-size:22px; letter-spacing:0.01em; }
+  .brand .name b{ font-weight:600; color:var(--gold-soft); }
+  .count-tag{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px; color:var(--text-dim); letter-spacing:0.06em;
+  }
+
+  /* ---------- Tabs ---------- */
+  .tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+  }
+  .tab{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11.5px;
+    letter-spacing:0.06em;
+    padding:8px 14px;
+    border-radius:999px;
+    border:1px solid var(--navy-line);
+    background:var(--navy);
+    color:var(--text-dim);
+    cursor:pointer;
+    text-transform:uppercase;
+    transition:all .15s ease;
+  }
+  .tab:hover{ color:var(--text); border-color:#33407a; }
+  .tab.active{
+    background:var(--gold);
+    color:#191204;
+    border-color:var(--gold);
+    font-weight:600;
+  }
+
+  /* ---------- Card grid ---------- */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+    gap:16px;
+  }
+  .card{
+    background:linear-gradient(180deg, var(--navy-panel), var(--navy));
+    border:1px solid var(--navy-line);
+    border-radius:14px;
+    padding:18px;
+    cursor:pointer;
+    position:relative;
+    overflow:hidden;
+    transition:transform .15s ease, border-color .15s ease;
+    min-height:150px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+  }
+  .card:hover{ transform:translateY(-3px); border-color:var(--gold); }
+  .card.locked{ cursor:default; opacity:0.55; }
+  .card.locked:hover{ transform:none; border-color:var(--navy-line); }
+
+  .card .subject-tag{
+    font-family:'JetBrains Mono',monospace;
+    font-size:9.5px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .card .exp-title{
+    font-size:17px;
+    font-weight:500;
+    margin-top:10px;
+    color:var(--text);
+  }
+  .card .exp-desc{
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:6px;
+    line-height:1.5;
+  }
+  .card .status{
+    margin-top:14px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+  .dot{ width:6px; height:6px; border-radius:50%; }
+  .dot.live{ background:var(--good); box-shadow:0 0 8px var(--good); }
+  .dot.locked{ background:var(--locked); }
+  .status.live{ color:var(--good); }
+  .status.locked{ color:var(--locked); }
+
+  .card .icon{
+    position:absolute;
+    right:-10px; top:-10px;
+    font-size:64px;
+    opacity:0.06;
+  }
+
+  /* ---------- Viewer (experiment full view) ---------- */
+  .viewer{ display:none; }
+  .viewer.active{ display:block; }
+  .grid-wrap.hidden{ display:none; }
+
+  .back-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .back-btn{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    color:var(--text-dim);
+    background:var(--navy);
+    border:1px solid var(--navy-line);
+    border-radius:8px;
+    padding:9px 14px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .back-btn:hover{ color:var(--gold-soft); border-color:var(--gold); }
+  .viewer-title{ font-size:15px; color:var(--text-dim); }
+  .viewer-title b{ color:var(--gold-soft); font-weight:600; }
+
+  .frame-wrap{
+    border:1px solid var(--navy-line);
+    border-radius:14px;
+    overflow:hidden;
+    background:var(--navy-deep);
+  }
+  .frame-wrap iframe{
+    width:100%;
+    height:820px;
+    border:0;
+    display:block;
+  }
+  @media (max-width:820px){
+    .frame-wrap iframe{ height:1050px; }
+  }
+
+  footer{
+    margin-top:26px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px;
+    color:var(--text-dim);
+    letter-spacing:0.06em;
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <div class="header">
+    <div class="brand">
+      <span class="mark">QUANTAIP</span>
+      <span class="name">Simulator — <b>Virtual Lab</b></span>
+    </div>
+    <div class="count-tag" id="countTag">1 of 12 experiments live</div>
+  </div>
+
+  <div id="menuView">
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-subject="all">All</div>
+      <div class="tab" data-subject="physics">Physics</div>
+      <div class="tab" data-subject="chemistry">Chemistry</div>
+      <div class="tab" data-subject="biology">Biology</div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="viewer" id="viewerView">
+    <div class="back-row">
+      <button class="back-btn" id="backBtn">← Back to Lab Menu</button>
+      <div class="viewer-title">Now viewing: <b id="viewerTitle"></b></div>
+    </div>
+    <div class="frame-wrap">
+      <iframe id="expFrame" title="experiment"></iframe>
+    </div>
+  </div>
+
+  <footer>QUANTAIP EDUOS · VIRTUAL LAB MODULE · PROTOTYPE SHELL</footer>
+</div>
+
+<script>
+(function(){
+
+  // ---- Experiment registry ----
+  // status: 'live' -> has a working file; 'locked' -> coming soon
+  const experiments = [
+    { id:'pendulum', subject:'physics', title:'Simple Pendulum', desc:'Explore period, gravity and swing amplitude with a real numerical solver.', status:'live', file:'pendulum.html', icon:'⏱' },
+    { id:'projectile', subject:'physics', title:'Projectile Motion', desc:'Launch angle, velocity and gravity — trace the trajectory in real time.', status:'live', file:'projectile.html', icon:'🎯' },
+    { id:'circuit', subject:'physics', title:'Ohm\'s Law Circuit', desc:'Build a simple series circuit and read live voltage, current, resistance.', status:'live', file:'circuit.html', icon:'⚡' },
+    { id:'beatfreq', subject:'physics', title:'Beat Frequency (Two Tones)', desc:'Play two tones together and hear beat frequency interference.', status:'live', file:'sound_frequency_dual.html', icon:'🔊' },
+    { id:'optics', subject:'physics', title:'Lens & Refraction', desc:'Trace light rays through convex/concave lenses and prisms.', status:'locked', icon:'🔍' },
+    { id:'wave', subject:'physics', title:'Wave Interference', desc:'Superpose two waves and observe constructive/destructive patterns.', status:'locked', icon:'〰' },
+    { id:'acidbase', subject:'chemistry', title:'Acid-Base Titration', desc:'Add titrant drop by drop and watch the pH curve and colour change.', status:'locked', icon:'🧪' },
+    { id:'reaction', subject:'chemistry', title:'Reaction Rates', desc:'Vary concentration, temperature and catalyst to see rate change live.', status:'locked', icon:'🔥' },
+    { id:'periodic', subject:'chemistry', title:'Periodic Trends Explorer', desc:'Interactive periodic table — atomic radius, electronegativity trends.', status:'locked', icon:'⬡' },
+    { id:'cell', subject:'biology', title:'Cell Structure', desc:'Labeled, explorable plant and animal cell diagrams with functions.', status:'locked', icon:'🧬' },
+    { id:'photosynthesis', subject:'biology', title:'Photosynthesis Cycle', desc:'Animate light and dark reactions with adjustable light intensity.', status:'locked', icon:'🌿' },
+    { id:'circulatory', subject:'biology', title:'Circulatory System', desc:'Follow blood flow through the heart, lungs and body in real time.', status:'locked', icon:'❤' },
+    { id:'genetics', subject:'biology', title:'Punnett Square Lab', desc:'Cross traits and generate offspring probability visually.', status:'locked', icon:'🔬' }
+  ];
+
+  const grid = document.getElementById('grid');
+  const tabs = document.getElementById('tabs');
+  const countTag = document.getElementById('countTag');
+  const menuView = document.getElementById('menuView');
+  const viewerView = document.getElementById('viewerView');
+  const expFrame = document.getElementById('expFrame');
+  const viewerTitle = document.getElementById('viewerTitle');
+  const backBtn = document.getElementById('backBtn');
+
+  let currentFilter = 'all';
+
+  function renderGrid(){
+    grid.innerHTML = '';
+    const list = experiments.filter(e => currentFilter==='all' || e.subject===currentFilter);
+    list.forEach(exp=>{
+      const card = document.createElement('div');
+      card.className = 'card' + (exp.status==='locked' ? ' locked' : '');
+      card.innerHTML = `
+        <div class="icon">${exp.icon}</div>
+        <div>
+          <div class="subject-tag">${exp.subject}</div>
+          <div class="exp-title">${exp.title}</div>
+          <div class="exp-desc">${exp.desc}</div>
+        </div>
+        <div class="status ${exp.status}">
+          <span class="dot ${exp.status}"></span>
+          ${exp.status==='live' ? 'Available now' : 'Coming soon'}
+        </div>
+      `;
+      if (exp.status==='live'){
+        card.addEventListener('click', ()=> openExperiment(exp));
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  function openExperiment(exp){
+    viewerTitle.textContent = exp.title;
+    expFrame.src = exp.file;
+    menuView.style.display = 'none';
+    viewerView.classList.add('active');
+  }
+
+  backBtn.addEventListener('click', ()=>{
+    viewerView.classList.remove('active');
+    menuView.style.display = 'block';
+    expFrame.src = '';
+  });
+
+  tabs.addEventListener('click', (e)=>{
+    if (!e.target.classList.contains('tab')) return;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    e.target.classList.add('active');
+    currentFilter = e.target.dataset.subject;
+    renderGrid();
+  });
+
+  const liveCount = experiments.filter(e=>e.status==='live').length;
+  countTag.textContent = `${liveCount} of ${experiments.length} experiments live`;
+
+  renderGrid();
+})();
+</script>
+
+</body>
+</html>

@@ -7,21 +7,21 @@ import StudentDetailModal from "../components/StudentDetailModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportExcelModal from "../components/ImportExcelModal";
 import { exportStudents } from "../services/excelExport";
+import { useClasses, classSort } from "../services/classes";
 
 function studentName(d) {
   return d.fullName || "Unknown";
 }
 
-// Natural sort for grade labels like "Grade 5" ... "Grade 12".
-function gradeSort(a, b) {
-  const na = parseInt(String(a).replace(/\D/g, ""), 10);
-  const nb = parseInt(String(b).replace(/\D/g, ""), 10);
-  if (!isNaN(na) && !isNaN(nb)) return na - nb;
-  return String(a).localeCompare(String(b));
-}
-
 export default function Students() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
+
+  // Class filter options come from schools/{schoolCode}/classes.
+  const {
+    classes,
+    empty: noClasses,
+    reload: reloadClasses,
+  } = useClasses(schoolCode);
 
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +75,7 @@ export default function Students() {
   const handleSuccess = (message) => {
     setSuccess(message);
     load();
+    reloadClasses();
     setTimeout(() => setSuccess(""), 4000);
   };
 
@@ -105,13 +106,15 @@ export default function Students() {
     }
   };
 
-  // Unique grades present in the data, for the dropdown.
+  // Filter options: the school's defined classes, plus any class already on a
+  // student record so nobody becomes unfilterable.
   const grades = useMemo(() => {
-    const set = new Set(
-      students.map((s) => s.grade).filter((g) => g && g !== "—")
-    );
-    return ["All Grades", ...Array.from(set).sort(gradeSort)];
-  }, [students]);
+    const set = new Set(classes);
+    students.forEach((s) => {
+      if (s.grade && s.grade !== "—") set.add(s.grade);
+    });
+    return ["All Grades", ...Array.from(set).sort(classSort)];
+  }, [classes, students]);
 
   // Apply search + grade filter.
   const filtered = useMemo(() => {
@@ -155,7 +158,16 @@ export default function Students() {
           >
             📥 Export Excel
           </button>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
+          <button
+            className="btn-primary"
+            onClick={() => setShowModal(true)}
+            disabled={noClasses}
+            title={
+              noClasses
+                ? "Add classes from the Classes tab before adding students."
+                : undefined
+            }
+          >
             + Add Student
           </button>
         </div>
@@ -163,6 +175,12 @@ export default function Students() {
 
       {success && <div className="success-banner">{success}</div>}
       {error && <div className="login-error">{error}</div>}
+      {noClasses && (
+        <div className="warn-banner">
+          ⚠️ No classes defined yet. Add classes from the{" "}
+          <strong>Classes</strong> tab before adding students.
+        </div>
+      )}
 
       {/* Toolbar: search + grade filter */}
       <div className="toolbar">

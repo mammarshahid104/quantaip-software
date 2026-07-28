@@ -10,6 +10,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { useClasses, NO_CLASSES_MESSAGE } from "../services/classes";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -21,12 +22,6 @@ function nextNumberFrom(docs) {
   return max + 1;
 }
 
-const CLASSES = [
-  "Nursery",
-  "Prep",
-  "KG",
-  ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
-];
 const SECTIONS = ["A", "B", "C"];
 
 const firstNameOf = (name) => name.trim().split(/\s+/)[0] || "";
@@ -38,6 +33,13 @@ export default function AddStudentModal({
   onSuccess,
 }) {
   const isEdit = !!student;
+
+  // Class options come from schools/{schoolCode}/classes — never a fixed list.
+  const {
+    classes,
+    loading: classesLoading,
+    empty: noClasses,
+  } = useClasses(schoolCode);
 
   // Random 4-digit suffix generated once when the modal opens (add mode only).
   const randomNum = useMemo(
@@ -60,6 +62,16 @@ export default function AddStudentModal({
   const [error, setError] = useState("");
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Keep a student's existing class selectable even if it was later removed
+  // from the classes collection.
+  const classOptions = useMemo(
+    () =>
+      form.class && !classes.includes(form.class)
+        ? [...classes, form.class]
+        : classes,
+    [classes, form.class]
+  );
 
   // Name drives the auto-generated password until the user edits it.
   const handleNameChange = (value) => {
@@ -168,14 +180,20 @@ export default function AddStudentModal({
                 className="field-input"
                 value={form.class}
                 onChange={(e) => update("class", e.target.value)}
+                disabled={classesLoading || noClasses}
               >
-                <option value="">Select class…</option>
-                {CLASSES.map((c) => (
+                <option value="">
+                  {classesLoading ? "Loading classes…" : "Select class…"}
+                </option>
+                {classOptions.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
               </select>
+              {noClasses && (
+                <span className="field-hint">⚠️ {NO_CLASSES_MESSAGE}</span>
+              )}
             </label>
 
             <label className="field">

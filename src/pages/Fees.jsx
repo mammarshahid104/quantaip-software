@@ -17,14 +17,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import ConfirmDialog from "../components/ConfirmDialog";
-
-// The 15 classes, in order — source of truth for the fee-structure table.
-const CLASSES = [
-  "Nursery",
-  "Prep",
-  "KG",
-  ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
-];
+import { useClasses, classSort, NO_CLASSES_MESSAGE } from "../services/classes";
 
 const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Other"];
 const DISCOUNT_TYPES = ["Scholarship", "Sibling", "Orphan", "Other"];
@@ -86,6 +79,9 @@ function formatDate(ts) {
 
 export default function Fees() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
+
+  // Fee-structure rows come from schools/{schoolCode}/classes — never a fixed list.
+  const { classes: definedClasses, empty: noClasses } = useClasses(schoolCode);
 
   const months = useMemo(() => getLast6Months(), []);
   const [month, setMonth] = useState(months[0]);
@@ -238,9 +234,20 @@ export default function Fees() {
   }, [students, feeStructure, feeMap]);
 
   const classes = useMemo(() => {
-    const set = new Set(rows.map((r) => r.cls).filter((c) => c && c !== "—"));
-    return ["All Classes", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [rows]);
+    const set = new Set(definedClasses);
+    rows.forEach((r) => {
+      if (r.cls && r.cls !== "—") set.add(r.cls);
+    });
+    return ["All Classes", ...Array.from(set).sort(classSort)];
+  }, [definedClasses, rows]);
+
+  // Fee-structure table: defined classes, plus any class that already has a
+  // fee saved against it.
+  const structureClasses = useMemo(() => {
+    const set = new Set(definedClasses);
+    Object.keys(feeStructure).forEach((c) => set.add(c));
+    return Array.from(set).sort(classSort);
+  }, [definedClasses, feeStructure]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -526,6 +533,10 @@ export default function Fees() {
               <div className="route-loading-spinner" />
               <span>Loading fee structure…</span>
             </div>
+          ) : structureClasses.length === 0 ? (
+            <div className="table-state">
+              {noClasses ? `⚠️ ${NO_CLASSES_MESSAGE}` : "No classes found"}
+            </div>
           ) : (
             <table className="data-table">
               <thead>
@@ -536,7 +547,7 @@ export default function Fees() {
                 </tr>
               </thead>
               <tbody>
-                {CLASSES.map((cls) => (
+                {structureClasses.map((cls) => (
                   <tr key={cls}>
                     <td className="cell-strong">{cls}</td>
                     <td>

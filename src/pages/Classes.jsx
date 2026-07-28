@@ -9,29 +9,7 @@ import AddClassModal from "../components/AddClassModal";
 import ViewClassModal from "../components/ViewClassModal";
 import EditInchargeModal from "../components/EditInchargeModal";
 import ManageSubjectsModal from "../components/ManageSubjectsModal";
-
-// Order: Nursery, Prep, KG, then Grade 1..12, unknowns last.
-const NAMED_RANK = {
-  "pre-nursery": -4,
-  prenursery: -4,
-  nursery: -3,
-  prep: -2,
-  kg: -1,
-  kindergarten: -1,
-};
-function classRank(name) {
-  const key = String(name).toLowerCase().trim();
-  if (key in NAMED_RANK) return NAMED_RANK[key];
-  const m = key.match(/(\d+)/);
-  if (m) return parseInt(m[1], 10);
-  return 999;
-}
-function classSort(a, b) {
-  const ra = classRank(a);
-  const rb = classRank(b);
-  if (ra !== rb) return ra - rb;
-  return String(a).localeCompare(String(b));
-}
+import { classSort } from "../services/classes";
 
 export default function Classes() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
