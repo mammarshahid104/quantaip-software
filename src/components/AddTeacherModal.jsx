@@ -1,5 +1,7 @@
 // Add / Edit Teacher modal — writes to schools/{schoolCode}/teachers
 // Pass a `teacher` prop ({ id, ...data }) to open in edit mode.
+// Adding a teacher also creates their Firebase Auth login account, so they can
+// sign into the mobile app straight away.
 import { useEffect, useMemo, useState } from "react";
 import {
   collection,
@@ -11,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useClasses, NO_CLASSES_MESSAGE, classSort } from "../services/classes";
+import { createAuthAccount } from "../services/authAccounts";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -147,6 +150,7 @@ export default function AddTeacherModal({
       };
 
       let teacherId;
+      let authWarning = "";
       if (isEdit) {
         teacherId = teacher.id;
         await updateDoc(doc(colRef, teacherId), fields);
@@ -163,6 +167,17 @@ export default function AddTeacherModal({
           id: teacherId,
           createdAt: serverTimestamp(),
         });
+
+        // The Firestore doc is not a login — create the Auth account too.
+        // A failure here must not roll back or hide the saved teacher, so it
+        // only downgrades the success banner to a warning.
+        try {
+          await createAuthAccount(teacherId, fields.password);
+        } catch (authErr) {
+          console.error("Teacher auth account creation failed:", authErr);
+          authWarning =
+            " — but login account creation failed. Run the account setup script for this teacher.";
+        }
       }
 
       // Sync class-incharge assignments — only for classes still assigned,
@@ -191,7 +206,11 @@ export default function AddTeacherModal({
       }
 
       onSuccess?.(
-        isEdit ? "Teacher updated successfully!" : "Teacher added successfully!"
+        isEdit
+          ? "Teacher updated successfully!"
+          : authWarning
+          ? `Teacher added${authWarning}`
+          : "Teacher added successfully!"
       );
       onClose?.();
     } catch (err) {

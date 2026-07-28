@@ -3,6 +3,8 @@
 //   Teachers: Full Name | Subject | Class Assigned | Phone No.
 // Every "Class" value is validated against schools/{schoolCode}/classes; rows
 // naming an unknown class are flagged and skipped, but never block the import.
+// Imports run in two phases: Firestore docs first, then a Firebase Auth login
+// account for every imported teacher / student / parent.
 // Props: type ("students" | "teachers"), schoolCode, onClose, onSuccess
 import { useMemo, useState } from "react";
 import {
@@ -19,6 +21,11 @@ import {
   downloadTeacherTemplate,
 } from "../services/excelExport";
 import { useClasses, matchClass, NO_CLASSES_MESSAGE } from "../services/classes";
+import {
+  createAuthAccount,
+  AUTH_CREATE_DELAY_MS,
+  sleep,
+} from "../services/authAccounts";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -62,7 +69,8 @@ export default function ImportExcelModal({
   const [parsed, setParsed] = useState(null); // { rows }
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  // phase: "docs" while writing Firestore, "accounts" while creating logins.
+  const [progress, setProgress] = useState({ phase: "docs", done: 0, total: 0 });
 
   // Sheets carry the class name too (older exports had one sheet per class),
   // so a missing "Class" column still resolves.
@@ -188,7 +196,13 @@ export default function ImportExcelModal({
     if (!validRows.length) return;
     setImporting(true);
     setError("");
-    setProgress({ done: 0, total: validRows.length });
+    setProgress({ phase: "docs", done: 0, total: validRows.length });
+
+    // Every account to create once the docs are written: { id, password }.
+    // For students this is two entries per row — the student and their parent.
+    const accounts = [];
+    let done = 0;
+
     try {
       const colRef = collection(
         db,
@@ -196,12 +210,13 @@ export default function ImportExcelModal({
       );
       const snap = await getDocs(colRef);
       let next = nextNumberFrom(snap.docs);
-      let done = 0;
 
       for (const r of validRows) {
         const padded = String(next).padStart(4, "0");
+        const password = `${firstNameOf(r.name)}${rand4()}`;
         if (isStudents) {
           const id = `${schoolCode}-STU-${padded}`;
+          const parentId = `${schoolCode}-PAR-${padded}`;
           await setDoc(doc(colRef, id), {
             id,
             fullName: r.name,
@@ -210,13 +225,28 @@ export default function ImportExcelModal({
             section: r.section || "A",
             rollNo: r.rollNo,
             parentPhone: r.parentPhone,
-            parentId: `${schoolCode}-PAR-${padded}`,
-            password: `${firstNameOf(r.name)}${rand4()}`,
+            parentId,
+            password,
             role: "student",
             school: schoolCode,
             status: "active",
             createdAt: serverTimestamp(),
           });
+          // Paired parent account — shares the student's password so the admin
+          // has a single credential to hand to the family.
+          await setDoc(doc(db, `schools/${schoolCode}/parents/${parentId}`), {
+            id: parentId,
+            name: r.fatherName,
+            phone: r.parentPhone,
+            password,
+            role: "parent",
+            school: schoolCode,
+            status: "active",
+            studentId: id,
+            studentName: r.name,
+            createdAt: serverTimestamp(),
+          });
+          accounts.push({ id, password }, { id: parentId, password });
         } else {
           const id = `${schoolCode}-TCH-${padded}`;
           await setDoc(doc(colRef, id), {
@@ -225,21 +255,18 @@ export default function ImportExcelModal({
             subject: r.subject,
             phone: r.phone,
             classesAssigned: r.classesAssigned,
-            password: `${firstNameOf(r.name)}${rand4()}`,
+            password,
             role: "teacher",
             school: schoolCode,
             status: "active",
             createdAt: serverTimestamp(),
           });
+          accounts.push({ id, password });
         }
         next += 1;
         done += 1;
-        setProgress({ done, total: validRows.length });
+        setProgress({ phase: "docs", done, total: validRows.length });
       }
-
-      onSuccess?.(
-        `Imported ${done} ${isStudents ? "students" : "teachers"} successfully!`
-      );
     } catch (err) {
       console.error("Import failed:", err);
       setError(
@@ -248,12 +275,44 @@ export default function ImportExcelModal({
           : "Import failed partway through. Please try again."
       );
       setImporting(false);
+      return;
     }
+
+    // Phase 2 — Auth logins. The docs are already saved, so a failure here is
+    // reported as a warning rather than failing the import. Firebase throttles
+    // signups per IP, hence the pause between calls.
+    setProgress({ phase: "accounts", done: 0, total: accounts.length });
+    let created = 0;
+    let failed = 0;
+    for (const acc of accounts) {
+      try {
+        await createAuthAccount(acc.id, acc.password);
+        created += 1;
+      } catch (authErr) {
+        failed += 1;
+        console.error(`Auth account creation failed for ${acc.id}:`, authErr);
+      }
+      setProgress({
+        phase: "accounts",
+        done: created + failed,
+        total: accounts.length,
+      });
+      await sleep(AUTH_CREATE_DELAY_MS);
+    }
+
+    const label = isStudents ? "students" : "teachers";
+    onSuccess?.(
+      failed
+        ? `Imported ${done} ${label}, but ${failed} login account(s) failed — ` +
+            `run the account setup script for those users.`
+        : `Imported ${done} ${label} successfully!`
+    );
   };
 
   const pct = progress.total
     ? Math.round((progress.done / progress.total) * 100)
     : 0;
+  const creatingAccounts = progress.phase === "accounts";
 
   const previewRows = validRows.slice(0, 5);
 
@@ -408,11 +467,18 @@ export default function ImportExcelModal({
             {importing && (
               <div className="import-step">
                 <div className="import-step-title">
-                  Importing… {progress.done}/{progress.total}
+                  {creatingAccounts ? "Creating login accounts…" : "Importing…"}{" "}
+                  {progress.done}/{progress.total}
                 </div>
                 <div className="progress-wrap">
                   <div className="progress-fill" style={{ width: `${pct}%` }} />
                 </div>
+                {creatingAccounts && (
+                  <p className="page-subtitle" style={{ marginTop: 8 }}>
+                    Data is saved. Setting up mobile app logins — this takes a
+                    moment, please keep this window open.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -434,7 +500,9 @@ export default function ImportExcelModal({
             disabled={importing || classesLoading || validRows.length === 0}
           >
             {importing
-              ? `Importing… ${progress.done}/${progress.total}`
+              ? `${
+                  creatingAccounts ? "Creating login accounts…" : "Importing…"
+                } ${progress.done}/${progress.total}`
               : `Import ${validRows.length} ${
                   isStudents ? "Students" : "Teachers"
                 }`}

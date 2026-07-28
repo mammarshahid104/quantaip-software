@@ -1,5 +1,7 @@
 // Add / Edit Student modal — writes to schools/{schoolCode}/students
 // Pass a `student` prop ({ id, ...data }) to open in edit mode.
+// Adding a student also creates the paired parent doc plus the Firebase Auth
+// login accounts for both, so they can sign into the mobile app straight away.
 import { useMemo, useState } from "react";
 import {
   collection,
@@ -11,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useClasses, NO_CLASSES_MESSAGE } from "../services/classes";
+import { createAuthAccount } from "../services/authAccounts";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -123,16 +126,54 @@ export default function AddStudentModal({
         const next = nextNumberFrom(snap.docs);
         const padded = String(next).padStart(4, "0");
         const generatedId = `${schoolCode}-STU-${padded}`;
+        const parentId = `${schoolCode}-PAR-${padded}`;
         await setDoc(doc(colRef, generatedId), {
           ...fields,
           role: "student",
           school: schoolCode,
           status: "active",
           id: generatedId,
-          parentId: `${schoolCode}-PAR-${padded}`,
+          parentId,
           createdAt: serverTimestamp(),
         });
-        onSuccess?.("Student added successfully!");
+
+        // Paired parent account. Parent and student share one password so the
+        // admin has a single credential to hand to the family.
+        await setDoc(doc(db, `schools/${schoolCode}/parents/${parentId}`), {
+          id: parentId,
+          name: fields.fatherName,
+          phone: fields.parentPhone,
+          password: fields.password,
+          role: "parent",
+          school: schoolCode,
+          status: "active",
+          studentId: generatedId,
+          studentName: fields.fullName,
+          createdAt: serverTimestamp(),
+        });
+
+        // The Firestore docs are not logins — create the Auth accounts too.
+        // Failures here must not roll back or hide the saved student, so they
+        // only downgrade the success banner to a warning.
+        const failed = [];
+        for (const [label, id] of [
+          ["student", generatedId],
+          ["parent", parentId],
+        ]) {
+          try {
+            await createAuthAccount(id, fields.password);
+          } catch (authErr) {
+            console.error(`${label} auth account creation failed:`, authErr);
+            failed.push(label);
+          }
+        }
+
+        onSuccess?.(
+          failed.length
+            ? `Student added — but ${failed.join(" and ")} login account ` +
+                `creation failed. Run the account setup script for this student.`
+            : "Student added successfully!"
+        );
       }
       onClose?.();
     } catch (err) {
