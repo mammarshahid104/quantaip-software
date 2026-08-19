@@ -16,6 +16,7 @@ import {
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { firebaseConfig } from "../firebase/config";
+import PasswordInput from "../components/PasswordInput";
 
 const SUPER_ADMIN_PASSWORD = "QUANTAIP@SuperAdmin2026";
 
@@ -255,17 +256,15 @@ export default function SchoolSetup() {
                 Enter the QUANTAIP admin password to create a new school.
               </p>
 
-              <label className="field">
+              <div className="field">
                 <span className="field-label">QUANTAIP Admin Password</span>
-                <input
-                  className="field-input"
-                  type="password"
-                  placeholder="••••••••"
+                <PasswordInput
                   value={superPassword}
-                  onChange={(e) => setSuperPassword(e.target.value)}
+                  onChange={setSuperPassword}
+                  placeholder="••••••••"
                   autoFocus
                 />
-              </label>
+              </div>
 
               {verifyError && <div className="login-error">{verifyError}</div>}
 
@@ -364,18 +363,17 @@ export default function SchoolSetup() {
                 />
               </label>
 
-              <label className="field">
+              <div className="field">
                 <span className="field-label">Admin Password * (min 8)</span>
                 <div className="setup-pwd-row">
-                  <input
-                    className="field-input"
-                    type="text"
-                    placeholder="At least 8 characters"
+                  <PasswordInput
+                    className="setup-pwd-input"
                     value={form.adminPassword}
-                    onChange={(e) => {
+                    onChange={(v) => {
                       setAdminPasswordTouched(true);
-                      update("adminPassword", e.target.value);
+                      update("adminPassword", v);
                     }}
+                    placeholder="At least 8 characters"
                   />
                   <button
                     type="button"
@@ -385,7 +383,7 @@ export default function SchoolSetup() {
                     Generate
                   </button>
                 </div>
-              </label>
+              </div>
 
               {/* Section C: Subscription */}
               <div className="setup-section-title">Subscription</div>
@@ -472,8 +470,13 @@ export default function SchoolSetup() {
                       type="button"
                       className="setup-link"
                       onClick={() => setShowPassword((s) => !s)}
+                      title={showPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      aria-pressed={showPassword}
                     >
-                      {showPassword ? "Hide" : "Show"}
+                      {showPassword ? "🙈" : "👁️"}
                     </button>
                   </span>
                 </div>

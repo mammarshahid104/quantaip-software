@@ -151,8 +151,13 @@ export default function TeacherDetailModal({ schoolCode, teacherId, onClose }) {
                           type="button"
                           className="pwd-toggle"
                           onClick={() => setShowPwd((s) => !s)}
+                          title={showPwd ? "Hide password" : "Show password"}
+                          aria-label={
+                            showPwd ? "Hide password" : "Show password"
+                          }
+                          aria-pressed={showPwd}
                         >
-                          {showPwd ? "Hide" : "Show"}
+                          {showPwd ? "🙈" : "👁️"}
                         </button>
                       )}
                     </div>

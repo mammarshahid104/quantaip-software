@@ -13,7 +13,10 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useClasses, NO_CLASSES_MESSAGE } from "../services/classes";
+import { useSections, matchSection } from "../services/sections";
 import { createAuthAccount } from "../services/authAccounts";
+import ComboBox from "./ComboBox";
+import PasswordInput from "./PasswordInput";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -24,8 +27,6 @@ function nextNumberFrom(docs) {
   }
   return max + 1;
 }
-
-const SECTIONS = ["A", "B", "C"];
 
 const firstNameOf = (name) => name.trim().split(/\s+/)[0] || "";
 
@@ -43,6 +44,10 @@ export default function AddStudentModal({
     loading: classesLoading,
     empty: noClasses,
   } = useClasses(schoolCode);
+
+  // Section options are whatever this school already uses — A/B/C, "Purple",
+  // "Mango"… — and a new name can simply be typed in.
+  const { sections } = useSections(schoolCode);
 
   // Random 4-digit suffix generated once when the modal opens (add mode only).
   const randomNum = useMemo(
@@ -111,7 +116,10 @@ export default function AddStudentModal({
       const fields = {
         fullName: form.fullName.trim(),
         class: form.class,
-        section: form.section,
+        // Snap to the existing spelling ("purple" → "Purple") so a typo in
+        // case doesn't split one section into two.
+        section:
+          matchSection(sections, form.section) || form.section.trim(),
         rollNo: form.rollNo.trim(),
         fatherName: form.fatherName.trim(),
         parentPhone: form.parentPhone.trim(),
@@ -237,21 +245,18 @@ export default function AddStudentModal({
               )}
             </label>
 
-            <label className="field">
+            <div className="field">
               <span className="field-label">Section *</span>
-              <select
-                className="field-input"
+              <ComboBox
                 value={form.section}
-                onChange={(e) => update("section", e.target.value)}
-              >
-                <option value="">Select section…</option>
-                {SECTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(v) => update("section", v)}
+                options={sections}
+                placeholder="e.g. A, Purple, Mango"
+              />
+              <span className="field-hint">
+                Pick an existing section or type a new name.
+              </span>
+            </div>
 
             <label className="field">
               <span className="field-label">Roll No *</span>
@@ -286,19 +291,17 @@ export default function AddStudentModal({
               />
             </label>
 
-            <label className="field">
+            <div className="field">
               <span className="field-label">Password *</span>
-              <input
-                className="field-input"
-                type="text"
+              <PasswordInput
                 value={form.password}
-                onChange={(e) => {
+                onChange={(v) => {
                   setPasswordTouched(true);
-                  update("password", e.target.value);
+                  update("password", v);
                 }}
                 placeholder="Auto-generated"
               />
-            </label>
+            </div>
           </div>
 
           <div className="modal-footer">

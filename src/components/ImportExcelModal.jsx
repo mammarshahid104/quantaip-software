@@ -87,7 +87,10 @@ export default function ImportExcelModal({
           cls:
             pick(r, "Class", "class") ||
             (sheetName.toLowerCase() === "students" ? "" : sheetName),
-          section: pick(r, "Section", "section") || "A",
+          // Whatever the sheet says — "A", "Purple", "Mango". A blank stays
+          // blank rather than being stamped "A", which would invent a section
+          // that doesn't exist in schools using custom names.
+          section: pick(r, "Section", "section"),
           rollNo: pick(r, "Roll No.", "Roll No", "Roll Number"),
           fatherName: pick(r, "Father Name", "Fathers Name"),
           parentPhone: pick(r, "Parents Phone", "Parent Phone", "Phone"),
@@ -222,7 +225,7 @@ export default function ImportExcelModal({
             fullName: r.name,
             fatherName: r.fatherName,
             class: r.cls,
-            section: r.section || "A",
+            section: r.section,
             rollNo: r.rollNo,
             parentPhone: r.parentPhone,
             parentId,
@@ -353,7 +356,8 @@ export default function ImportExcelModal({
                 {isStudents ? (
                   <>
                     Columns: Full Name · Class · Section · Roll No. · Father
-                    Name · Parents Phone. Fill the data and upload below.
+                    Name · Parents Phone. Section can be any name your school
+                    uses — A, B, Purple, Mango. Fill the data and upload below.
                   </>
                 ) : (
                   <>
@@ -445,7 +449,7 @@ export default function ImportExcelModal({
                           <tr key={i}>
                             <td>{r.name}</td>
                             <td>{r.cls}</td>
-                            <td>{r.section}</td>
+                            <td>{r.section || "—"}</td>
                             <td>{r.rollNo}</td>
                           </tr>
                         ) : (

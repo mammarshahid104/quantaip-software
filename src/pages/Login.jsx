@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase/config";
+import PasswordInput from "../components/PasswordInput";
 
 // Admin email format matches the mobile app:
 //   GHS-001  ->  ghs-001-adm-001@quantaip.edu.pk
@@ -89,17 +90,15 @@ export default function Login() {
             />
           </label>
 
-          <label className="field">
+          <div className="field">
             <span className="field-label">Password</span>
-            <input
-              className="field-input"
-              type="password"
-              placeholder="••••••••"
+            <PasswordInput
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
+              placeholder="••••••••"
               autoComplete="current-password"
             />
-          </label>
+          </div>
 
           {error && <div className="login-error">{error}</div>}
 

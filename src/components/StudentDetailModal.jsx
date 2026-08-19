@@ -189,8 +189,13 @@ export default function StudentDetailModal({ schoolCode, studentId, onClose }) {
                         type="button"
                         className="pwd-toggle"
                         onClick={() => setShowStudentPwd((p) => !p)}
+                        title={showStudentPwd ? "Hide password" : "Show password"}
+                        aria-label={
+                          showStudentPwd ? "Hide password" : "Show password"
+                        }
+                        aria-pressed={showStudentPwd}
                       >
-                        {showStudentPwd ? "Hide" : "Show"}
+                        {showStudentPwd ? "🙈" : "👁️"}
                       </button>
                     </div>
                   </div>
@@ -243,8 +248,13 @@ export default function StudentDetailModal({ schoolCode, studentId, onClose }) {
                             type="button"
                             className="pwd-toggle"
                             onClick={() => setShowPwd((s) => !s)}
+                            title={showPwd ? "Hide password" : "Show password"}
+                            aria-label={
+                              showPwd ? "Hide password" : "Show password"
+                            }
+                            aria-pressed={showPwd}
                           >
-                            {showPwd ? "Hide" : "Show"}
+                            {showPwd ? "🙈" : "👁️"}
                           </button>
                         )}
                       </div>

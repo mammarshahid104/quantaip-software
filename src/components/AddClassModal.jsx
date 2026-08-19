@@ -11,6 +11,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { useSections, matchSection } from "../services/sections";
+import ComboBox from "./ComboBox";
 
 function teacherName(d) {
   return d.fullName || d.name || "Unknown";
@@ -19,9 +21,11 @@ function teacherName(d) {
 export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
   const [form, setForm] = useState({
     name: "",
-    section: "A",
+    section: "",
     classIncharge: "",
   });
+  // Existing section names for this school — A/B/C, "Purple", anything.
+  const { sections } = useSections(schoolCode);
   const [teachers, setTeachers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -73,13 +77,16 @@ export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
     setSaving(true);
     try {
       const teacher = teachers.find((t) => t.id === form.classIncharge);
+      // Reuse the school's existing spelling when the typed name matches one.
+      const section =
+        matchSection(sections, form.section) || form.section.trim();
       await setDoc(
         doc(db, `schools/${schoolCode}/classes`, name),
         {
           name,
-          section: form.section.trim(),
+          section: section,
           // Mobile (ClassesScreen) stores sections as an array; mirror it.
-          sections: form.section.trim() ? [form.section.trim()] : [],
+          sections: section ? [section] : [],
           classIncharge: teacher?.id || "",
           classInchargeName: teacher?.name || "",
           createdAt: serverTimestamp(),
@@ -126,16 +133,18 @@ export default function AddClassModal({ schoolCode, onClose, onSuccess }) {
               />
             </label>
 
-            <label className="field">
+            <div className="field">
               <span className="field-label">Section</span>
-              <input
-                className="field-input"
-                type="text"
+              <ComboBox
                 value={form.section}
-                onChange={(e) => update("section", e.target.value)}
-                placeholder="e.g. A"
+                onChange={(v) => update("section", v)}
+                options={sections}
+                placeholder="e.g. A, Purple, Mango"
               />
-            </label>
+              <span className="field-hint">
+                Pick an existing section or type a new name.
+              </span>
+            </div>
 
             <label className="field">
               <span className="field-label">Class Incharge</span>

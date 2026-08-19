@@ -14,6 +14,7 @@ import {
 import { db } from "../firebase/config";
 import { useClasses, NO_CLASSES_MESSAGE, classSort } from "../services/classes";
 import { createAuthAccount } from "../services/authAccounts";
+import PasswordInput from "./PasswordInput";
 
 // Next sequential number from the max existing doc ID (delete-safe).
 function nextNumberFrom(docs) {
@@ -320,19 +321,17 @@ export default function AddTeacherModal({
               />
             </label>
 
-            <label className="field">
+            <div className="field">
               <span className="field-label">Password *</span>
-              <input
-                className="field-input"
-                type="text"
+              <PasswordInput
                 value={form.password}
-                onChange={(e) => {
+                onChange={(v) => {
                   setPasswordTouched(true);
-                  update("password", e.target.value);
+                  update("password", v);
                 }}
                 placeholder="Auto-generated"
               />
-            </label>
+            </div>
           </div>
 
           <div className="modal-footer">
