@@ -9,7 +9,7 @@ import AddClassModal from "../components/AddClassModal";
 import ViewClassModal from "../components/ViewClassModal";
 import EditInchargeModal from "../components/EditInchargeModal";
 import ManageSubjectsModal from "../components/ManageSubjectsModal";
-import { classSort } from "../services/classes";
+import { classSort, syncClassesFromStudents } from "../services/classes";
 
 export default function Classes() {
   const schoolCode = localStorage.getItem("schoolCode") || "your school";
@@ -23,6 +23,9 @@ export default function Classes() {
   const [viewClass, setViewClass] = useState(null);
   const [editInchargeClass, setEditInchargeClass] = useState(null);
   const [manageSubjects, setManageSubjects] = useState(null);
+  // Class names students already use that have no class document yet.
+  const [unsynced, setUnsynced] = useState([]);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +62,8 @@ export default function Classes() {
         return byClass.get(cls);
       };
 
+      // Names the students themselves carry — the backfill candidates.
+      const fromStudents = new Map(); // lowercased -> original spelling
       for (const doc of studentsSnap.docs) {
         const d = doc.data();
         const cls = d["class"];
@@ -66,6 +71,8 @@ export default function Classes() {
         const entry = ensure(cls);
         entry.count += 1;
         if (d.section) entry.sections.add(d.section);
+        const key = String(cls).trim().toLowerCase();
+        if (key && !fromStudents.has(key)) fromStudents.set(key, String(cls).trim());
       }
 
       // Merge in formal class documents — they may have no students yet.
@@ -80,6 +87,19 @@ export default function Classes() {
           inchargeByClass.set(name, c.classInchargeName.trim());
         }
       }
+
+      // Anything a student references that has no class doc still needs one.
+      const formalKeys = new Set(
+        classesSnap.docs.map((d) =>
+          String(d.data().name || d.id).trim().toLowerCase()
+        )
+      );
+      setUnsynced(
+        Array.from(fromStudents.entries())
+          .filter(([key]) => !formalKeys.has(key))
+          .map(([, name]) => name)
+          .sort(classSort)
+      );
 
       const rows = Array.from(byClass.keys())
         .sort(classSort)
@@ -119,6 +139,37 @@ export default function Classes() {
     setTimeout(() => setSuccess(""), 4000);
   };
 
+  // One-time backfill for schools migrated before the classes collection
+  // existed. Create-only, so re-running it is harmless.
+  const handleSync = async () => {
+    setSyncing(true);
+    setError("");
+    try {
+      const { created, skipped } = await syncClassesFromStudents(schoolCode);
+      const shown = created.slice(0, 8).join(", ");
+      const more =
+        created.length > 8 ? `, …and ${created.length - 8} more` : "";
+      let message = created.length
+        ? `${created.length} class${
+            created.length === 1 ? "" : "es"
+          } created from existing student data: ${shown}${more}`
+        : "Every class in your student data already exists — nothing to create.";
+      if (skipped.length) {
+        message += ` (${skipped.length} skipped — a class name can't contain "/".)`;
+      }
+      handleSuccess(message);
+    } catch (err) {
+      console.error("Sync classes from students failed:", err);
+      setError(
+        err.code === "permission-denied"
+          ? "You don't have permission to add classes."
+          : "Couldn't sync classes. Please try again."
+      );
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return classes;
@@ -135,13 +186,38 @@ export default function Classes() {
             Classes for <strong>{schoolCode}</strong>
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowAdd(true)}>
-          + Add Class
-        </button>
+        <div className="header-actions">
+          {unsynced.length > 0 && (
+            <button
+              className="btn-excel-import"
+              onClick={handleSync}
+              disabled={syncing}
+              title="Create class documents for classes your students already use."
+            >
+              {syncing
+                ? "Syncing…"
+                : `🔄 Sync ${unsynced.length} Class${
+                    unsynced.length === 1 ? "" : "es"
+                  } from Students`}
+            </button>
+          )}
+          <button className="btn-primary" onClick={() => setShowAdd(true)}>
+            + Add Class
+          </button>
+        </div>
       </div>
 
       {success && <div className="success-banner">{success}</div>}
       {error && <div className="login-error">{error}</div>}
+      {unsynced.length > 0 && !syncing && (
+        <div className="warn-banner">
+          ⚠️ {unsynced.length} class{unsynced.length === 1 ? "" : "es"} (
+          {unsynced.slice(0, 6).join(", ")}
+          {unsynced.length > 6 ? ", …" : ""}) appear on student records but have
+          no class document yet. <strong>Sync</strong> creates them so they show
+          up in every class dropdown, timetable and fee structure.
+        </div>
+      )}
 
       {/* Toolbar: search */}
       <div className="toolbar">

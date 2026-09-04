@@ -21,6 +21,7 @@ export default function Students() {
   const {
     classes,
     empty: noClasses,
+    derived: derivedClasses,
     reload: reloadClasses,
   } = useClasses(schoolCode);
 
@@ -206,6 +207,14 @@ export default function Students() {
         <div className="warn-banner">
           ⚠️ No classes defined yet. Add classes from the{" "}
           <strong>Classes</strong> tab before adding students.
+        </div>
+      )}
+      {derivedClasses && (
+        <div className="warn-banner">
+          ⚠️ Class names below are read from your existing student records — no
+          class documents exist yet. Open the <strong>Classes</strong> tab and
+          click <strong>Sync Classes from Students</strong> to save them
+          properly.
         </div>
       )}
 
