@@ -77,6 +77,7 @@ export default function Results() {
             rollNo: d.rollNo || "—",
             name: studentName(d),
             cls: d["class"] || "—",
+            status: String(d.status || "active").toLowerCase(),
             marksMap: d.marksMap || {},
           };
         });
@@ -127,6 +128,11 @@ export default function Results() {
   }, [tests, selectedTest]);
 
   // Build ranked rows for the selected class + test.
+  //
+  // A student only appears once they have marks for this test, so withdrawn
+  // students are already absent from any test they never sat — that is the
+  // "excluded from new results" half. The half that matters is the opposite
+  // one: a result they did earn stays visible, tagged, and is never dropped.
   const rows = useMemo(() => {
     const list = students
       .filter((s) => s.cls === selectedClass)
@@ -141,6 +147,7 @@ export default function Results() {
           id: s.id,
           rollNo: s.rollNo,
           name: s.name,
+          inactive: s.status === "inactive",
           obtained: marks.obtained,
           total: marks.total,
           pct,
@@ -296,7 +303,17 @@ export default function Results() {
                 return (
                   <tr key={r.id}>
                     <td className="cell-muted">{r.rollNo}</td>
-                    <td className="cell-strong">{r.name}</td>
+                    <td className="cell-strong">
+                      {r.name}
+                      {r.inactive && (
+                        <span
+                          className="badge badge-warn"
+                          style={{ marginLeft: 6, fontSize: 11 }}
+                        >
+                          Withdrawn
+                        </span>
+                      )}
+                    </td>
                     <td>{r.obtained}</td>
                     <td>{r.total}</td>
                     <td>{r.pct}%</td>

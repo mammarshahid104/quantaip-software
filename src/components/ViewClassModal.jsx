@@ -48,6 +48,9 @@ export default function ViewClassModal({ schoolCode, className, onClose }) {
           section: d.section || "—",
           status: (d.status || "active").toLowerCase(),
         }))
+        // Withdrawn students leave the class roster and its headcount; their
+        // record and history stay in Firestore, just not in this list.
+        .filter((s) => s.status !== "inactive")
         .sort((a, b) =>
           String(a.rollNo).localeCompare(String(b.rollNo), undefined, {
             numeric: true,

@@ -30,6 +30,9 @@ export default function Students() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [grade, setGrade] = useState("All Grades");
+  // Withdrawn students are kept in Firestore but hidden by default, so the
+  // roster reads as the current school rather than every pupil ever enrolled.
+  const [statusFilter, setStatusFilter] = useState("Active");
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showBulkUpdate, setShowBulkUpdate] = useState(false);
@@ -138,15 +141,22 @@ export default function Students() {
     [students]
   );
 
-  // Apply search + grade filter.
+  // Apply search + grade + status filter.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return students.filter((s) => {
       const matchesSearch = !q || s.name.toLowerCase().includes(q);
       const matchesGrade = grade === "All Grades" || s.grade === grade;
-      return matchesSearch && matchesGrade;
+      const matchesStatus =
+        statusFilter === "All" || s.status === statusFilter.toLowerCase();
+      return matchesSearch && matchesGrade && matchesStatus;
     });
-  }, [students, search, grade]);
+  }, [students, search, grade, statusFilter]);
+
+  const inactiveCount = useMemo(
+    () => students.filter((s) => s.status === "inactive").length,
+    [students]
+  );
 
   return (
     <div className="page">
@@ -241,6 +251,17 @@ export default function Students() {
             </option>
           ))}
         </select>
+        <select
+          className="filter-select"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          {["Active", "Inactive", "All"].map((s) => (
+            <option key={s} value={s}>
+              {s === "All" ? "All Statuses" : s}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Stats row */}
@@ -252,6 +273,14 @@ export default function Students() {
         <span>
           Showing: <strong>{filtered.length}</strong>
         </span>
+        {inactiveCount > 0 && (
+          <>
+            <span className="stats-sep">·</span>
+            <span>
+              Inactive: <strong>{inactiveCount}</strong>
+            </span>
+          </>
+        )}
       </div>
 
       {/* Table */}

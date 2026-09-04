@@ -143,7 +143,10 @@ export default function Fees() {
           cls: data["class"] || "—",
           section: data.section || "—",
           rollNo: data.rollNo || "—",
-          status: data.status || "active",
+          // Enrollment status (active / inactive). Deliberately NOT `status`:
+          // the merged fee row below uses `status` for the payment state
+          // (paid / pending), which the toolbar filter reads.
+          enrollmentStatus: String(data.status || "active").toLowerCase(),
           discountMode,
           discountPercent,
           discountAmount,
@@ -233,13 +236,21 @@ export default function Fees() {
     });
   }, [students, feeStructure, feeMap]);
 
+  // Withdrawn students drop out of fee collection, but a month they actually
+  // paid for stays fully visible — `hasRecord` means money changed hands, and
+  // that history is never hidden.
+  const activeRows = useMemo(
+    () => rows.filter((r) => r.enrollmentStatus !== "inactive" || r.hasRecord),
+    [rows]
+  );
+
   const classes = useMemo(() => {
     const set = new Set(definedClasses);
-    rows.forEach((r) => {
+    activeRows.forEach((r) => {
       if (r.cls && r.cls !== "—") set.add(r.cls);
     });
     return ["All Classes", ...Array.from(set).sort(classSort)];
-  }, [definedClasses, rows]);
+  }, [definedClasses, activeRows]);
 
   // Fee-structure table: defined classes, plus any class that already has a
   // fee saved against it.
@@ -251,7 +262,7 @@ export default function Fees() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
+    return activeRows.filter((r) => {
       const matchesSearch = !q || r.fullName.toLowerCase().includes(q);
       const matchesClass =
         classFilter === "All Classes" || r.cls === classFilter;
@@ -259,13 +270,13 @@ export default function Fees() {
         statusFilter === "All" || r.status === statusFilter.toLowerCase();
       return matchesSearch && matchesClass && matchesStatus;
     });
-  }, [rows, search, classFilter, statusFilter]);
+  }, [activeRows, search, classFilter, statusFilter]);
 
   const totals = useMemo(() => {
     let total = 0;
     let collected = 0;
     let defaulters = 0;
-    for (const r of rows) {
+    for (const r of activeRows) {
       total += r.finalAmount;
       if (r.status === "paid") collected += r.finalAmount;
       else defaulters += 1;
@@ -276,7 +287,7 @@ export default function Fees() {
       pending: Math.max(total - collected, 0),
       defaulters,
     };
-  }, [rows]);
+  }, [activeRows]);
 
   const summary = [
     { label: "Total Fee", value: money(totals.total), icon: "💵" },
@@ -440,7 +451,7 @@ export default function Fees() {
 
           <div className="stats-row">
             <span>
-              Total: <strong>{rows.length}</strong>
+              Total: <strong>{activeRows.length}</strong>
             </span>
             <span className="stats-sep">·</span>
             <span>

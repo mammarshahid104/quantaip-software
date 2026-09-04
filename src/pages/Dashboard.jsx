@@ -104,7 +104,9 @@ export default function Dashboard() {
               name: studentName(d),
               grade: d["class"] || "—",
               cls: d.section || "—",
-              status: d.status || "Active",
+              // Every writer in the app stores this lowercase ("active"),
+              // so normalise here and capitalise only for display.
+              status: String(d.status || "active").toLowerCase(),
             };
           });
 
@@ -240,10 +242,10 @@ export default function Dashboard() {
                     <span
                       className={
                         "badge " +
-                        (stu.status === "Active" ? "badge-ok" : "badge-warn")
+                        (stu.status === "active" ? "badge-ok" : "badge-warn")
                       }
                     >
-                      {stu.status}
+                      {stu.status.charAt(0).toUpperCase() + stu.status.slice(1)}
                     </span>
                   </td>
                 </tr>

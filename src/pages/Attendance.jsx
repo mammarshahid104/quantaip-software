@@ -76,6 +76,7 @@ export default function Attendance() {
             rollNo: d.rollNo || "—",
             name: studentName(d),
             cls: d["class"] || "—",
+            status: String(d.status || "active").toLowerCase(),
             attendanceMap: d.attendanceMap || {},
           };
         });
@@ -115,6 +116,11 @@ export default function Attendance() {
   }, [classes, selectedClass]);
 
   // Build per-student rows for the selected class + month.
+  //
+  // Withdrawn students drop off the marking list, but a month they were
+  // actually here for still shows them — otherwise marking a new day would
+  // list people who have left, while past months would silently lose the
+  // pupils who sat in them.
   const rows = useMemo(() => {
     return students
       .filter((s) => s.cls === selectedClass)
@@ -122,8 +128,10 @@ export default function Attendance() {
         const { present, absent } = tallyMonth(s.attendanceMap, selectedMonth);
         const total = present + absent;
         const pct = total > 0 ? Math.round((present / total) * 100) : 0;
-        return { ...s, present, absent, total, pct };
+        const inactive = s.status === "inactive";
+        return { ...s, present, absent, total, pct, inactive };
       })
+      .filter((r) => !r.inactive || r.total > 0)
       .sort((a, b) => {
         // Sort by roll no numerically when possible, else by name.
         const ra = parseInt(String(a.rollNo).replace(/\D/g, ""), 10);
@@ -247,7 +255,17 @@ export default function Attendance() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="cell-muted">{r.rollNo}</td>
-                  <td className="cell-strong">{r.name}</td>
+                  <td className="cell-strong">
+                    {r.name}
+                    {r.inactive && (
+                      <span
+                        className="badge badge-warn"
+                        style={{ marginLeft: 6, fontSize: 11 }}
+                      >
+                        Withdrawn
+                      </span>
+                    )}
+                  </td>
                   <td>{r.present}</td>
                   <td>{r.absent}</td>
                   <td>{r.total}</td>

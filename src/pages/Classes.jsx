@@ -69,8 +69,12 @@ export default function Classes() {
         const cls = d["class"];
         if (!cls) continue;
         const entry = ensure(cls);
-        entry.count += 1;
-        if (d.section) entry.sections.add(d.section);
+        // The class itself still exists for a withdrawn student — it just
+        // shouldn't count them as currently enrolled.
+        if (String(d.status || "active").toLowerCase() !== "inactive") {
+          entry.count += 1;
+          if (d.section) entry.sections.add(d.section);
+        }
         const key = String(cls).trim().toLowerCase();
         if (key && !fromStudents.has(key)) fromStudents.set(key, String(cls).trim());
       }
