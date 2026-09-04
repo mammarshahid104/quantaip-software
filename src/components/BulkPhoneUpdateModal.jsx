@@ -40,6 +40,15 @@ function pick(row, ...headers) {
   return "";
 }
 
+// Excel stores a phone typed as bare digits as a number, which drops the
+// leading zero: 03009999999 comes back as 3009999999. Ten digits with no
+// leading 0 is exactly that case — put it back (Pakistani mobile format).
+// Anything else (dashes, +92, a 0 already there) is left untouched.
+function normalizePhone(value) {
+  const v = String(value ?? "").trim();
+  return /^\d{10}$/.test(v) && !v.startsWith("0") ? `0${v}` : v;
+}
+
 export default function BulkPhoneUpdateModal({
   schoolCode,
   students,
@@ -170,7 +179,7 @@ export default function BulkPhoneUpdateModal({
         // Only parentPhone — the rest of the student doc is left alone.
         await updateDoc(
           doc(db, `schools/${schoolCode}/students/${u.student.id}`),
-          { parentPhone: u.phone }
+          { parentPhone: normalizePhone(u.phone) }
         );
         done += 1;
       } catch (err) {
@@ -319,7 +328,7 @@ export default function BulkPhoneUpdateModal({
                           <td>{r.rollNo}</td>
                           <td>{r.student.cls}</td>
                           <td>{r.student.name}</td>
-                          <td>{r.phone}</td>
+                          <td>{normalizePhone(r.phone)}</td>
                         </tr>
                       ))}
                     </tbody>
