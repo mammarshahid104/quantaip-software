@@ -2,9 +2,12 @@
 // exist in Firestore, matched by Roll No + Class.
 // Template columns: Roll No | Class | Parent Phone (the first two pre-filled
 // from the roster, the third left blank for the admin).
-// Nothing but `parentPhone` is written: rows that don't match an existing
+// Two docs are touched per matched student and nothing else: the student's
+// `parentPhone`, and the linked parents/{parentId} doc's `phone`, so the two
+// copies of the number never drift apart. Rows that don't match an existing
 // student are skipped and reported, never created.
-// Props: schoolCode, students [{ id, name, rollNo, cls }], onClose, onSuccess
+// Props: schoolCode, students [{ id, name, rollNo, cls, parentId }],
+//        onClose, onSuccess
 import { useMemo, useState } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -174,12 +177,18 @@ export default function BulkPhoneUpdateModal({
 
     let done = 0;
     let failed = 0;
+    let parentFailed = 0;
+    // Once the parents collection refuses one write it will refuse them all,
+    // so stop trying after the first denial instead of hammering it per row.
+    let parentDenied = false;
+
     for (const u of updates) {
+      const phone = normalizePhone(u.phone);
       try {
         // Only parentPhone — the rest of the student doc is left alone.
         await updateDoc(
           doc(db, `schools/${schoolCode}/students/${u.student.id}`),
-          { parentPhone: normalizePhone(u.phone) }
+          { parentPhone: phone }
         );
         done += 1;
       } catch (err) {
@@ -190,13 +199,52 @@ export default function BulkPhoneUpdateModal({
           return;
         }
         failed += 1;
+        setProgress({ done: done + failed, total: updates.length });
+        continue; // student write failed — don't sync a number that wasn't saved
       }
+
+      // Keep the linked parent record's phone in step. The student doc is
+      // already saved, so a failure here is counted and reported rather than
+      // failing the row. Students predating the paired-parent accounts have
+      // no parentId and simply have nothing to sync.
+      if (u.student.parentId) {
+        if (parentDenied) {
+          // Still unsynced, so it stays in the count — just don't re-ask.
+          parentFailed += 1;
+        } else {
+          try {
+            await updateDoc(
+              doc(db, `schools/${schoolCode}/parents/${u.student.parentId}`),
+              { phone }
+            );
+          } catch (parentErr) {
+            console.error(
+              `Parent phone sync failed for ${u.student.parentId}:`,
+              parentErr
+            );
+            parentFailed += 1;
+            if (parentErr.code === "permission-denied") parentDenied = true;
+          }
+        }
+      }
+
       setProgress({ done: done + failed, total: updates.length });
     }
 
+    const issues = [];
+    if (failed) issues.push(`${failed} failed`);
+    if (parentFailed)
+      issues.push(
+        `${parentFailed} linked parent record${
+          parentFailed === 1 ? "" : "s"
+        } couldn't be synced`
+      );
+
     onSuccess?.(
-      failed
-        ? `${done} parent phone numbers updated, ${failed} failed — please retry those.`
+      issues.length
+        ? `${done} parent phone numbers updated — ${issues.join(
+            ", "
+          )}. Please retry those.`
         : `${done} parent phone numbers updated successfully!`
     );
   };

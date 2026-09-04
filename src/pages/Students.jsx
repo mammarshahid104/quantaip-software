@@ -119,7 +119,8 @@ export default function Students() {
   }, [classes, students]);
 
   // Roll No + Class is what the bulk phone update matches on, so it gets the
-  // raw values rather than the table's "—" placeholders.
+  // raw values rather than the table's "—" placeholders. parentId comes along
+  // so the linked parent doc's phone can be kept in sync.
   const phoneUpdateRoster = useMemo(
     () =>
       students.map((s) => ({
@@ -127,6 +128,7 @@ export default function Students() {
         name: s.name,
         rollNo: s.raw.rollNo || "",
         cls: s.raw["class"] || "",
+        parentId: s.raw.parentId || "",
       })),
     [students]
   );
