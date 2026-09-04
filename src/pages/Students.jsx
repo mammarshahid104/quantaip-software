@@ -6,6 +6,7 @@ import AddStudentModal from "../components/AddStudentModal";
 import StudentDetailModal from "../components/StudentDetailModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportExcelModal from "../components/ImportExcelModal";
+import BulkPhoneUpdateModal from "../components/BulkPhoneUpdateModal";
 import { exportStudents } from "../services/excelExport";
 import { useClasses, classSort } from "../services/classes";
 
@@ -30,6 +31,7 @@ export default function Students() {
   const [grade, setGrade] = useState("All Grades");
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showPhoneUpdate, setShowPhoneUpdate] = useState(false);
   const [editStudent, setEditStudent] = useState(null);
   const [viewStudent, setViewStudent] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -116,6 +118,19 @@ export default function Students() {
     return ["All Grades", ...Array.from(set).sort(classSort)];
   }, [classes, students]);
 
+  // Roll No + Class is what the bulk phone update matches on, so it gets the
+  // raw values rather than the table's "—" placeholders.
+  const phoneUpdateRoster = useMemo(
+    () =>
+      students.map((s) => ({
+        id: s.id,
+        name: s.name,
+        rollNo: s.raw.rollNo || "",
+        cls: s.raw["class"] || "",
+      })),
+    [students]
+  );
+
   // Apply search + grade filter.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -142,6 +157,12 @@ export default function Students() {
             onClick={() => setShowImport(true)}
           >
             📤 Import Excel
+          </button>
+          <button
+            className="btn-excel-import"
+            onClick={() => setShowPhoneUpdate(true)}
+          >
+            📱 Bulk Update Phones
           </button>
           <button
             className="btn-excel-export"
@@ -303,6 +324,18 @@ export default function Students() {
           schoolCode={schoolCode}
           studentId={viewStudent}
           onClose={() => setViewStudent(null)}
+        />
+      )}
+
+      {showPhoneUpdate && (
+        <BulkPhoneUpdateModal
+          schoolCode={schoolCode}
+          students={phoneUpdateRoster}
+          onClose={() => setShowPhoneUpdate(false)}
+          onSuccess={(msg) => {
+            setShowPhoneUpdate(false);
+            handleSuccess(msg);
+          }}
         />
       )}
 

@@ -3,6 +3,7 @@
 //   Students → Full Name | Class | Section | Roll No. | Father Name | Parents Phone
 //   Teachers → Full Name | Subject | Class Assigned | Phone No.
 import * as XLSX from "xlsx";
+import { classSort } from "./classes";
 
 export const STUDENT_COLUMNS = [
   "Full Name",
@@ -113,4 +114,36 @@ export function downloadTeacherTemplate() {
   XLSX.utils.book_append_sheet(wb, ws, "Teachers");
 
   XLSX.writeFile(wb, "Teacher_Import_Template.xlsx");
+}
+
+// ---- Bulk parent-phone update ----
+// Roll No + Class identify the student; Parent Phone is what the admin fills in.
+export const PHONE_UPDATE_COLUMNS = ["Roll No", "Class", "Parent Phone"];
+
+export const PHONE_UPDATE_SHEET = "Phone Update";
+
+// Template pre-filled with the existing roster's Roll No + Class, phone blank.
+// Sorted by class then roll no so it reads like a class register.
+export function downloadPhoneUpdateTemplate(students, schoolCode) {
+  const rows = students
+    .slice()
+    .sort(
+      (a, b) =>
+        classSort(a.cls || a.grade || "", b.cls || b.grade || "") ||
+        String(a.rollNo).localeCompare(String(b.rollNo), undefined, {
+          numeric: true,
+        })
+    )
+    .map((s) => ({
+      "Roll No": s.rollNo || "",
+      Class: s.cls || s.grade || s.class || "",
+      "Parent Phone": "",
+    }));
+
+  const ws = sheetWithColumns(rows, PHONE_UPDATE_COLUMNS);
+  ws["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 20 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, PHONE_UPDATE_SHEET);
+
+  XLSX.writeFile(wb, `Parent_Phones_${schoolCode}_${monthTag()}.xlsx`);
 }
