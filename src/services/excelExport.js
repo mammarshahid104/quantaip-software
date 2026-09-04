@@ -116,34 +116,54 @@ export function downloadTeacherTemplate() {
   XLSX.writeFile(wb, "Teacher_Import_Template.xlsx");
 }
 
-// ---- Bulk parent-phone update ----
-// Roll No + Class identify the student; Parent Phone is what the admin fills in.
-export const PHONE_UPDATE_COLUMNS = ["Roll No", "Class", "Parent Phone"];
+// ---- Bulk student update ----
+// A full editable snapshot of the roster: every column pre-filled with what is
+// currently in Firestore, so the admin changes only the cells that are wrong
+// and re-uploads. Student ID is the match key and must not be edited.
+export const BULK_UPDATE_COLUMNS = [
+  "Student ID",
+  "Roll No",
+  "Class",
+  "Full Name",
+  "Father Name",
+  "Parent Phone",
+  "Status",
+];
 
-export const PHONE_UPDATE_SHEET = "Phone Update";
+export const BULK_UPDATE_SHEET = "Bulk Update";
 
-// Template pre-filled with the existing roster's Roll No + Class, phone blank.
-// Sorted by class then roll no so it reads like a class register.
-export function downloadPhoneUpdateTemplate(students, schoolCode) {
+export function downloadBulkUpdateTemplate(students, schoolCode) {
   const rows = students
     .slice()
     .sort(
       (a, b) =>
-        classSort(a.cls || a.grade || "", b.cls || b.grade || "") ||
+        classSort(a.cls || "", b.cls || "") ||
         String(a.rollNo).localeCompare(String(b.rollNo), undefined, {
           numeric: true,
         })
     )
     .map((s) => ({
+      "Student ID": s.id,
       "Roll No": s.rollNo || "",
-      Class: s.cls || s.grade || s.class || "",
-      "Parent Phone": "",
+      Class: s.cls || "",
+      "Full Name": s.fullName || "",
+      "Father Name": s.fatherName || "",
+      "Parent Phone": s.parentPhone || "",
+      Status: s.status || "active",
     }));
 
-  const ws = sheetWithColumns(rows, PHONE_UPDATE_COLUMNS);
-  ws["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 20 }];
+  const ws = sheetWithColumns(rows, BULK_UPDATE_COLUMNS);
+  ws["!cols"] = [
+    { wch: 18 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 16 },
+    { wch: 10 },
+  ];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, PHONE_UPDATE_SHEET);
+  XLSX.utils.book_append_sheet(wb, ws, BULK_UPDATE_SHEET);
 
-  XLSX.writeFile(wb, `Parent_Phones_${schoolCode}_${monthTag()}.xlsx`);
+  XLSX.writeFile(wb, `Student_Bulk_Update_${schoolCode}_${monthTag()}.xlsx`);
 }

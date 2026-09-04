@@ -6,7 +6,7 @@ import AddStudentModal from "../components/AddStudentModal";
 import StudentDetailModal from "../components/StudentDetailModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportExcelModal from "../components/ImportExcelModal";
-import BulkPhoneUpdateModal from "../components/BulkPhoneUpdateModal";
+import BulkUpdateModal from "../components/BulkUpdateModal";
 import { exportStudents } from "../services/excelExport";
 import { useClasses, classSort } from "../services/classes";
 
@@ -31,7 +31,7 @@ export default function Students() {
   const [grade, setGrade] = useState("All Grades");
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showPhoneUpdate, setShowPhoneUpdate] = useState(false);
+  const [showBulkUpdate, setShowBulkUpdate] = useState(false);
   const [editStudent, setEditStudent] = useState(null);
   const [viewStudent, setViewStudent] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -118,16 +118,20 @@ export default function Students() {
     return ["All Grades", ...Array.from(set).sort(classSort)];
   }, [classes, students]);
 
-  // Roll No + Class is what the bulk phone update matches on, so it gets the
-  // raw values rather than the table's "—" placeholders. parentId comes along
-  // so the linked parent doc's phone can be kept in sync.
-  const phoneUpdateRoster = useMemo(
+  // The bulk-update sheet is a snapshot of the raw stored values, not the
+  // table's "—" placeholders, so a round-trip doesn't rewrite a dash into
+  // Firestore. parentId rides along so the linked parent doc's phone can be
+  // kept in sync when the phone changes.
+  const bulkUpdateRoster = useMemo(
     () =>
       students.map((s) => ({
         id: s.id,
-        name: s.name,
         rollNo: s.raw.rollNo || "",
         cls: s.raw["class"] || "",
+        fullName: s.raw.fullName || "",
+        fatherName: s.raw.fatherName || "",
+        parentPhone: s.raw.parentPhone || "",
+        status: String(s.raw.status || "active").toLowerCase(),
         parentId: s.raw.parentId || "",
       })),
     [students]
@@ -162,9 +166,9 @@ export default function Students() {
           </button>
           <button
             className="btn-excel-import"
-            onClick={() => setShowPhoneUpdate(true)}
+            onClick={() => setShowBulkUpdate(true)}
           >
-            📱 Bulk Update Phones
+            📝 Bulk Update Students
           </button>
           <button
             className="btn-excel-export"
@@ -329,13 +333,13 @@ export default function Students() {
         />
       )}
 
-      {showPhoneUpdate && (
-        <BulkPhoneUpdateModal
+      {showBulkUpdate && (
+        <BulkUpdateModal
           schoolCode={schoolCode}
-          students={phoneUpdateRoster}
-          onClose={() => setShowPhoneUpdate(false)}
+          students={bulkUpdateRoster}
+          onClose={() => setShowBulkUpdate(false)}
           onSuccess={(msg) => {
-            setShowPhoneUpdate(false);
+            setShowBulkUpdate(false);
             handleSuccess(msg);
           }}
         />
