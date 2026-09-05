@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useClasses, classSort } from "../services/classes";
+import { useActingTeacher, scopeClasses } from "../services/actingTeacher";
 
 function studentName(d) {
   return d.fullName || d.name || "Unknown";
@@ -50,6 +51,7 @@ export default function Attendance() {
 
   // Class list from schools/{schoolCode}/classes — never a fixed list.
   const { classes: definedClasses } = useClasses(schoolCode);
+  const { teacher: actingTeacher } = useActingTeacher();
 
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,17 +104,22 @@ export default function Attendance() {
 
   // Chip selector: the school's defined classes plus any class already on a
   // student record.
+  // In proxy mode only the acting teacher's own classes are offered.
   const classes = useMemo(() => {
     const set = new Set(definedClasses);
     students.forEach((s) => {
       if (s.cls && s.cls !== "—") set.add(s.cls);
     });
-    return Array.from(set).sort(classSort);
-  }, [definedClasses, students]);
+    return scopeClasses(Array.from(set).sort(classSort), actingTeacher);
+  }, [definedClasses, students, actingTeacher]);
 
   // Default the selected class to the first one once data arrives.
   useEffect(() => {
-    if (!selectedClass && classes.length > 0) setSelectedClass(classes[0]);
+    if (classes.length === 0) return;
+    // Also re-point when the current pick falls outside the list — entering or
+    // leaving proxy mode changes which classes are on offer.
+    if (!selectedClass || !classes.includes(selectedClass))
+      setSelectedClass(classes[0]);
   }, [classes, selectedClass]);
 
   // Build per-student rows for the selected class + month.

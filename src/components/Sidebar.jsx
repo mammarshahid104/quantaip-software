@@ -2,6 +2,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
+import { useActingTeacher } from "../services/actingTeacher";
 
 const NAV_GROUPS = [
   {
@@ -40,8 +41,19 @@ const NAV_GROUPS = [
   },
 ];
 
+// What a teacher actually does in this app. In proxy mode the admin-only
+// sections (people, money, settings) are hidden so the screen matches what the
+// teacher would see on their own login.
+const TEACHER_ROUTES = new Set([
+  "/attendance",
+  "/results",
+  "/homework",
+  "/timetable",
+]);
+
 export default function Sidebar() {
   const navigate = useNavigate();
+  const { teacher, acting } = useActingTeacher();
   const schoolCode = localStorage.getItem("schoolCode") || "—";
   const schoolName = localStorage.getItem("schoolName") || "";
   const userName = localStorage.getItem("userName") || "Administrator";
@@ -57,6 +69,14 @@ export default function Sidebar() {
     navigate("/");
   };
 
+  // Proxy mode: drop admin-only destinations, and any group left empty.
+  const groups = acting
+    ? NAV_GROUPS.map((g) => ({
+        ...g,
+        items: g.items.filter((i) => TEACHER_ROUTES.has(i.to)),
+      })).filter((g) => g.items.length > 0)
+    : NAV_GROUPS;
+
   return (
     <aside className="sidebar">
       {/* Logo + school chip */}
@@ -70,7 +90,7 @@ export default function Sidebar() {
 
       {/* Grouped nav */}
       <nav className="sidebar-nav">
-        {NAV_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div className="nav-group" key={group.title}>
             <div className="nav-group-title">{group.title}</div>
             {group.items.map((item) => (
@@ -92,11 +112,13 @@ export default function Sidebar() {
       {/* User footer */}
       <div className="sidebar-foot">
         <div className="user-avatar">
-          {userName.charAt(0).toUpperCase()}
+          {(acting ? teacher.name : userName).charAt(0).toUpperCase()}
         </div>
         <div className="user-meta">
-          <div className="user-name">{userName}</div>
-          <div className="user-role">Admin</div>
+          <div className="user-name">{acting ? teacher.name : userName}</div>
+          <div className="user-role">
+            {acting ? "Teacher (acting)" : "Admin"}
+          </div>
         </div>
         <button
           className="logout-btn"

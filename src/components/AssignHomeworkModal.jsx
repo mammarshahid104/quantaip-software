@@ -8,8 +8,9 @@ import {
   setDoc,
   arrayUnion,
 } from "firebase/firestore";
-import { db } from "../firebase/config";
+import { auth, db } from "../firebase/config";
 import { useClasses, NO_CLASSES_MESSAGE } from "../services/classes";
+import { useActingTeacher, scopeClasses } from "../services/actingTeacher";
 
 // Today as YYYY-MM-DD (local) for the date input's min + default.
 function todayStr() {
@@ -30,10 +31,17 @@ export default function AssignHomeworkModal({
 
   // Class options come from schools/{schoolCode}/classes — never a fixed list.
   const {
-    classes,
+    classes: allClasses,
     loading: classesLoading,
     empty: noClasses,
   } = useClasses(schoolCode);
+
+  // Proxy mode: only this teacher's classes, and the work is theirs.
+  const { teacher: actingTeacher, acting } = useActingTeacher();
+  const classes = useMemo(
+    () => scopeClasses(allClasses, actingTeacher),
+    [allClasses, actingTeacher]
+  );
 
   const [teachers, setTeachers] = useState([]); // [{ name, subject }]
   const [form, setForm] = useState({
@@ -42,7 +50,7 @@ export default function AssignHomeworkModal({
     title: "",
     description: "",
     dueDate: today,
-    assignedBy: "",
+    assignedBy: acting ? actingTeacher.name : "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -118,6 +126,10 @@ export default function AssignHomeworkModal({
         teacherName: form.assignedBy || "",
         assignedDate: new Date().toISOString().split("T")[0],
         assignedAt: new Date().toISOString(),
+        // Audit only: which signed-in account actually performed the write.
+        // Purely additive — the mobile app reads the fields above and never
+        // sees a difference between this and the teacher's own entry.
+        recordedBy: auth.currentUser?.uid || "",
         // NOTE: serverTimestamp() cannot be used inside arrayUnion (Firestore
         // forbids sentinels inside arrays), so we store a client timestamp.
         createdAt: Date.now(),
@@ -234,18 +246,32 @@ export default function AssignHomeworkModal({
 
             <label className="field">
               <span className="field-label">Assigned By</span>
-              <select
-                className="field-input"
-                value={form.assignedBy}
-                onChange={(e) => update("assignedBy", e.target.value)}
-              >
-                <option value="">— Select teacher —</option>
-                {teacherNames.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+              {acting ? (
+                <>
+                  <input
+                    className="field-input"
+                    value={actingTeacher.name}
+                    readOnly
+                  />
+                  <span className="field-hint">
+                    You&apos;re acting as {actingTeacher.name}, so this homework
+                    is filed under their name.
+                  </span>
+                </>
+              ) : (
+                <select
+                  className="field-input"
+                  value={form.assignedBy}
+                  onChange={(e) => update("assignedBy", e.target.value)}
+                >
+                  <option value="">— Select teacher —</option>
+                  {teacherNames.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
           </div>
 

@@ -2016,3 +2016,59 @@ p {
   border-radius: 999px;
   transition: width 0.3s ease;
 }
+
+/* ===========================================================
+   Act as Teacher — proxy mode
+   =========================================================== */
+.btn-act-as {
+  background: transparent;
+  border: 1.5px solid #0d1f3c;
+  color: #0d1f3c;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-right: 10px;
+}
+.btn-act-as:hover {
+  background: #0d1f3c;
+  color: #fff;
+}
+.acting-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #e8f0fe;
+  border-bottom: 2px solid #1a73e8;
+  color: #0d1f3c;
+  padding: 10px 24px;
+  font-size: 14px;
+}
+.acting-banner-text {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.acting-banner-note {
+  color: #4a5b73;
+  font-size: 12px;
+}
+.acting-banner-exit {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.acting-banner-exit:hover {
+  background: #1558b8;
+}

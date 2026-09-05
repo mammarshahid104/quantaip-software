@@ -5,6 +5,7 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ActingTeacherProvider from "./components/ActingTeacherProvider";
 
 import Login from "./pages/Login";
 import SchoolSetup from "./pages/SchoolSetup";
@@ -24,6 +25,7 @@ import Settings from "./pages/Settings";
 export default function App() {
   return (
     <HashRouter>
+      <ActingTeacherProvider>
       <Routes>
         {/* Public */}
         <Route path="/" element={<Login />} />
@@ -56,6 +58,7 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ActingTeacherProvider>
     </HashRouter>
   );
 }

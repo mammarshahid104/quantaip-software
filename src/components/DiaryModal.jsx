@@ -1,7 +1,8 @@
 // Daily Diary generator modal — pick class/date/school, then export a PDF.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { generateDiary } from "../services/generateDiary";
 import { useClasses, NO_CLASSES_MESSAGE } from "../services/classes";
+import { useActingTeacher, scopeClasses } from "../services/actingTeacher";
 
 function todayStr() {
   const d = new Date();
@@ -19,10 +20,17 @@ export default function DiaryModal({
 }) {
   // Class options come from schools/{schoolCode}/classes — never a fixed list.
   const {
-    classes,
+    classes: allClasses,
     loading: classesLoading,
     empty: noClasses,
   } = useClasses(schoolCode);
+
+  // Proxy mode: only the acting teacher's own classes.
+  const { teacher: actingTeacher } = useActingTeacher();
+  const classes = useMemo(
+    () => scopeClasses(allClasses, actingTeacher),
+    [allClasses, actingTeacher]
+  );
 
   const [form, setForm] = useState({
     className: defaultClass || "",

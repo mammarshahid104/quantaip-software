@@ -12,6 +12,7 @@ import AssignHomeworkModal from "../components/AssignHomeworkModal";
 import DiaryModal from "../components/DiaryModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { classSort } from "../services/classes";
+import { useActingTeacher, scopeClasses } from "../services/actingTeacher";
 
 // Parse a due date that might be a Firestore Timestamp, millis, or string.
 function parseDate(v) {
@@ -53,6 +54,7 @@ export default function Homework() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
+  const { teacher: actingTeacher } = useActingTeacher();
   const [showAssign, setShowAssign] = useState(false);
   const [showDiary, setShowDiary] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // { className, item }
@@ -94,10 +96,18 @@ export default function Homework() {
     setTimeout(() => setSuccess(""), 4000);
   };
 
-  const classes = useMemo(() => Object.keys(docs).sort(classSort), [docs]);
+  // In proxy mode only the acting teacher's own classes are listed.
+  const classes = useMemo(
+    () => scopeClasses(Object.keys(docs).sort(classSort), actingTeacher),
+    [docs, actingTeacher]
+  );
 
   useEffect(() => {
-    if (!selectedClass && classes.length > 0) setSelectedClass(classes[0]);
+    if (classes.length === 0) return;
+    // Also re-point when the current pick falls outside the list — entering or
+    // leaving proxy mode changes which classes are on offer.
+    if (!selectedClass || !classes.includes(selectedClass))
+      setSelectedClass(classes[0]);
   }, [classes, selectedClass]);
 
   // Normalised homework items for the selected class.
