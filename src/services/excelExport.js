@@ -167,3 +167,48 @@ export function downloadBulkUpdateTemplate(students, schoolCode) {
 
   XLSX.writeFile(wb, `Student_Bulk_Update_${schoolCode}_${monthTag()}.xlsx`);
 }
+
+// ---- Bulk teacher update ----
+// Same contract as the student sheet: every column pre-filled with what is
+// currently in Firestore, Teacher ID as the match key and not to be edited.
+export const TEACHER_BULK_UPDATE_COLUMNS = [
+  "Teacher ID",
+  "Full Name",
+  "Subject",
+  "Classes Assigned",
+  "Phone",
+  "Status",
+];
+
+export const TEACHER_BULK_UPDATE_SHEET = "Teacher Bulk Update";
+
+export function downloadTeacherBulkUpdateTemplate(teachers, schoolCode) {
+  const rows = teachers
+    .slice()
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+    .map((t) => ({
+      "Teacher ID": t.id,
+      "Full Name": t.name || "",
+      Subject: t.subject || "",
+      // Comma-separated, matching the import template's spelling.
+      "Classes Assigned": Array.isArray(t.classesAssigned)
+        ? t.classesAssigned.join(", ")
+        : t.classesAssigned || "",
+      Phone: t.phone || "",
+      Status: t.status || "active",
+    }));
+
+  const ws = sheetWithColumns(rows, TEACHER_BULK_UPDATE_COLUMNS);
+  ws["!cols"] = [
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 16 },
+    { wch: 28 },
+    { wch: 16 },
+    { wch: 10 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, TEACHER_BULK_UPDATE_SHEET);
+
+  XLSX.writeFile(wb, `Teacher_Bulk_Update_${schoolCode}_${monthTag()}.xlsx`);
+}

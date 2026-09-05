@@ -1,9 +1,9 @@
-// Bulk student update — an editable snapshot of the roster, round-tripped
-// through Excel. The template comes pre-filled with current Firestore values;
-// the admin edits only the cells that are wrong and uploads the same file.
+// Bulk update — an editable snapshot of the roster, round-tripped through
+// Excel. The template comes pre-filled with current Firestore values; the
+// admin edits only the cells that are wrong and uploads the same file.
 //
-// Rows are matched on Student ID (the doc ID) rather than Roll No + Class,
-// because those two can themselves be edited here. Every column is then
+// Rows are matched on the doc ID rather than on any editable column, because
+// every other field is fair game for editing here. Each column is then
 // compared field by field against Firestore and only the fields that actually
 // differ are written, so an unchanged row costs no write at all.
 //
@@ -11,40 +11,98 @@
 // is a full snapshot, so a blank is far more likely to be an accident than an
 // intentional erase.
 //
-// Props: schoolCode,
-//        students [{ id, rollNo, cls, fullName, fatherName, parentPhone,
-//                    status, parentId }],
-//        onClose, onSuccess
+// Props: type ("students" | "teachers"), schoolCode, rows, onClose, onSuccess
 import { useMemo, useState } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../firebase/config";
 import {
   downloadBulkUpdateTemplate,
+  downloadTeacherBulkUpdateTemplate,
   BULK_UPDATE_SHEET,
+  TEACHER_BULK_UPDATE_SHEET,
 } from "../services/excelExport";
-
-// Editable columns. `key` is the field on the roster object, `docKey` the
-// Firestore field, `col` the sheet header (with the spellings we also accept).
-const FIELDS = [
-  { key: "rollNo", docKey: "rollNo", label: "Roll No", cols: ["Roll No", "Roll No.", "Roll Number"] },
-  { key: "cls", docKey: "class", label: "Class", cols: ["Class", "class", "Grade"] },
-  { key: "fullName", docKey: "fullName", label: "Full Name", cols: ["Full Name", "Name"] },
-  { key: "fatherName", docKey: "fatherName", label: "Father Name", cols: ["Father Name", "Fathers Name"] },
-  { key: "parentPhone", docKey: "parentPhone", label: "Parent Phone", cols: ["Parent Phone", "Parents Phone", "Phone"] },
-  { key: "status", docKey: "status", label: "Status", cols: ["Status", "status"] },
-];
+import { useClasses, matchClass } from "../services/classes";
+import { restoreLeadingZero, normalizePhone } from "../services/phone";
 
 const STATUSES = ["active", "inactive"];
 
-// Excel stores a phone typed as bare digits as a number, which drops the
-// leading zero: 03009999999 comes back as 3009999999. Ten digits with no
-// leading 0 is exactly that case — put it back (Pakistani mobile format).
-// Anything else (dashes, +92, a 0 already there) is left untouched.
-function normalizePhone(value) {
-  const v = String(value ?? "").trim();
-  return /^\d{10}$/.test(v) && !v.startsWith("0") ? `0${v}` : v;
-}
+const splitList = (value) =>
+  String(value ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+// ---------------------------------------------------------------------------
+// Per-type configuration. The diff engine below is entirely generic; every
+// difference between students and teachers lives in one of these two blocks.
+//
+// A field's `kind` drives how its cell is read and compared:
+//   text   — trimmed string, compared exactly
+//   phone  — normalized through `normalize` on BOTH sides, so an untouched
+//            number never reads as a change just because it has dashes
+//   list   — comma-separated, compared on the joined value
+//   status — active / inactive, anything else is rejected with a warning
+// ---------------------------------------------------------------------------
+const TYPES = {
+  students: {
+    title: "Bulk Update Students",
+    singular: "student",
+    collection: "students",
+    idLabel: "Student ID",
+    idCols: ["Student ID", "StudentID", "ID", "id"],
+    sheet: BULK_UPDATE_SHEET,
+    downloadTemplate: downloadBulkUpdateTemplate,
+    columnsHint:
+      "Student ID · Roll No · Class · Full Name · Father Name · Parent Phone · Status",
+    withdrawnWord: "withdrawn",
+    syncsParentPhone: true,
+    nameOf: (e) => e.fullName || e.id,
+    fields: [
+      { key: "rollNo", docKey: "rollNo", label: "Roll No", cols: ["Roll No", "Roll No.", "Roll Number"], kind: "text", bucket: "other field update" },
+      { key: "cls", docKey: "class", label: "Class", cols: ["Class", "class", "Grade"], kind: "text", bucket: "other field update" },
+      { key: "fullName", docKey: "fullName", label: "Full Name", cols: ["Full Name", "Name"], kind: "text", bucket: "other field update" },
+      { key: "fatherName", docKey: "fatherName", label: "Father Name", cols: ["Father Name", "Fathers Name"], kind: "text", bucket: "father name correction" },
+      { key: "parentPhone", docKey: "parentPhone", label: "Parent Phone", cols: ["Parent Phone", "Parents Phone", "Phone"], kind: "phone", normalize: restoreLeadingZero, bucket: "phone number change" },
+      { key: "status", docKey: "status", label: "Status", cols: ["Status", "status"], kind: "status" },
+    ],
+  },
+  teachers: {
+    title: "Bulk Update Teachers",
+    singular: "teacher",
+    collection: "teachers",
+    idLabel: "Teacher ID",
+    idCols: ["Teacher ID", "TeacherID", "ID", "id"],
+    sheet: TEACHER_BULK_UPDATE_SHEET,
+    downloadTemplate: downloadTeacherBulkUpdateTemplate,
+    columnsHint:
+      "Teacher ID · Full Name · Subject · Classes Assigned · Phone · Status",
+    withdrawnWord: "no longer teaching",
+    syncsParentPhone: false,
+    nameOf: (e) => e.name || e.id,
+    fields: [
+      {
+        key: "name",
+        docKey: "name",
+        label: "Full Name",
+        cols: ["Full Name", "Name", "name"],
+        kind: "text",
+        bucket: "name correction",
+        // Readers prefer `fullName` when a doc carries it, so a doc that
+        // already has one gets both written — otherwise the edit would save
+        // but never show.
+        toPayload: (value, entity) =>
+          entity.nameKey === "fullName"
+            ? { name: value, fullName: value }
+            : { name: value },
+      },
+      { key: "subject", docKey: "subject", label: "Subject", cols: ["Subject", "subject"], kind: "text", bucket: "subject change" },
+      { key: "classesAssigned", docKey: "classesAssigned", label: "Classes Assigned", cols: ["Classes Assigned", "Class Assigned", "Classes"], kind: "list", bucket: "class assignment change" },
+      { key: "phone", docKey: "phone", label: "Phone", cols: ["Phone", "Phone No.", "Phone No", "phone"], kind: "phone", normalize: normalizePhone, bucket: "phone change" },
+      { key: "status", docKey: "status", label: "Status", cols: ["Status", "status"], kind: "status" },
+    ],
+  },
+};
 
 // First non-empty value among the accepted header spellings.
 function pick(row, headers) {
@@ -59,37 +117,45 @@ function pick(row, headers) {
 const idKey = (v) => String(v ?? "").trim().toLowerCase();
 
 export default function BulkUpdateModal({
+  type = "students",
   schoolCode,
-  students,
+  rows: entities,
   onClose,
   onSuccess,
 }) {
+  const config = TYPES[type] || TYPES.students;
+  const { fields } = config;
+
+  // Only the teachers sheet validates class names, but hooks can't be
+  // conditional — the students flow simply never reads this.
+  const { classes } = useClasses(schoolCode);
+
   const [fileName, setFileName] = useState("");
-  const [rows, setRows] = useState(null);
+  const [sheetRows, setSheetRows] = useState(null);
   const [error, setError] = useState("");
   const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
 
-  // Student ID → student. Matched case-insensitively so a re-typed ID still
-  // lands, but the roster's own ID is what gets written to.
+  // Doc ID → entity. Matched case-insensitively so a re-typed ID still lands,
+  // but the roster's own ID is what gets written to.
   const byId = useMemo(() => {
     const map = new Map();
-    students.forEach((s) => map.set(idKey(s.id), s));
+    entities.forEach((e) => map.set(idKey(e.id), e));
     return map;
-  }, [students]);
+  }, [entities]);
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setError("");
-    setRows(null);
+    setSheetRows(null);
     setFileName(file.name);
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const sheetName =
         wb.SheetNames.find(
-          (n) => n.toLowerCase() === BULK_UPDATE_SHEET.toLowerCase()
+          (n) => n.toLowerCase() === config.sheet.toLowerCase()
         ) || wb.SheetNames[0];
       if (!sheetName) {
         setError("This file has no sheets to read.");
@@ -97,19 +163,19 @@ export default function BulkUpdateModal({
       }
       // raw:false gives the cell's displayed text, so a phone Excel decided
       // was a number still arrives as digits rather than 3.001234567e9.
-      const sheetRows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+      const parsed = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
         raw: false,
       });
-      setRows(
-        sheetRows.map((r, i) => {
-          const parsed = {
+      setSheetRows(
+        parsed.map((r, i) => {
+          const row = {
             rowNo: i + 2, // +1 for the header row, +1 for 1-based numbering
-            studentId: pick(r, ["Student ID", "StudentID", "ID", "id"]),
+            entityId: pick(r, config.idCols),
           };
-          FIELDS.forEach((f) => {
-            parsed[f.key] = pick(r, f.cols);
+          fields.forEach((f) => {
+            row[f.key] = pick(r, f.cols);
           });
-          return parsed;
+          return row;
         })
       );
     } catch (err) {
@@ -121,44 +187,46 @@ export default function BulkUpdateModal({
   // Diff every row against Firestore. Only fields that actually differ become
   // changes; rows whose cells all match are counted as untouched.
   const checked = useMemo(() => {
-    if (!rows)
-      return { updates: [], warnings: [], unchanged: 0, tally: null, changeCount: 0 };
+    if (!sheetRows)
+      return { updates: [], warnings: [], unchanged: 0, counts: {}, changeCount: 0 };
 
     const updates = [];
     const warnings = [];
     const seen = new Set();
     let unchanged = 0;
 
-    rows.forEach((r) => {
-      const anyValue = FIELDS.some((f) => r[f.key]);
-      if (!r.studentId && !anyValue) return; // empty spreadsheet row
-      if (!r.studentId) {
-        warnings.push(`Row ${r.rowNo}: no Student ID — skipped`);
+    sheetRows.forEach((r) => {
+      const anyValue = fields.some((f) => r[f.key]);
+      if (!r.entityId && !anyValue) return; // empty spreadsheet row
+      if (!r.entityId) {
+        warnings.push(`Row ${r.rowNo}: no ${config.idLabel} — skipped`);
         return;
       }
-      const student = byId.get(idKey(r.studentId));
-      if (!student) {
+      const entity = byId.get(idKey(r.entityId));
+      if (!entity) {
         warnings.push(
-          `Row ${r.rowNo}: No student found with Student ID ${r.studentId}`
+          `Row ${r.rowNo}: No ${config.singular} found with ${config.idLabel} ${r.entityId}`
         );
         return;
       }
-      if (seen.has(idKey(r.studentId))) {
+      if (seen.has(idKey(r.entityId))) {
         warnings.push(
-          `Row ${r.rowNo}: Student ID ${r.studentId} appears more than once in this file — skipped`
+          `Row ${r.rowNo}: ${config.idLabel} ${r.entityId} appears more than once in this file — skipped`
         );
         return;
       }
-      seen.add(idKey(r.studentId));
+      seen.add(idKey(r.entityId));
 
       const changes = [];
-      for (const f of FIELDS) {
+      for (const f of fields) {
         const incoming = r[f.key];
         if (!incoming) continue; // blank cell → leave the field as it is
 
-        let next = incoming;
-        if (f.key === "parentPhone") next = normalizePhone(incoming);
-        if (f.key === "status") {
+        let next;
+        let current;
+        let write;
+
+        if (f.kind === "status") {
           next = incoming.toLowerCase();
           if (!STATUSES.includes(next)) {
             warnings.push(
@@ -166,40 +234,66 @@ export default function BulkUpdateModal({
             );
             continue;
           }
+          current = String(entity.status || "active").toLowerCase();
+          write = next;
+        } else if (f.kind === "phone") {
+          // Both sides go through the same normalizer, so a number the admin
+          // never touched can't read as a change just because of its dashes.
+          next = f.normalize(incoming);
+          current = f.normalize(entity[f.key] ?? "");
+          write = next;
+        } else if (f.kind === "list") {
+          const list = splitList(incoming).map((c) => {
+            const known = matchClass(classes, c);
+            if (!known && classes.length) {
+              warnings.push(
+                `Row ${r.rowNo}: Class "${c}" isn't one of this school's classes — saved as typed`
+              );
+            }
+            // Reuse the school's own spelling when it matches.
+            return known || c;
+          });
+          const currentList = Array.isArray(entity[f.key])
+            ? entity[f.key]
+            : splitList(entity[f.key]);
+          next = list.join(", ");
+          current = currentList.join(", ");
+          write = list;
+        } else {
+          next = incoming;
+          current = String(entity[f.key] ?? "");
+          write = next;
         }
 
-        const current =
-          f.key === "status"
-            ? String(student.status || "active").toLowerCase()
-            : String(student[f.key] ?? "");
         if (next === current) continue;
-
-        changes.push({ ...f, from: current, to: next });
+        changes.push({ field: f, from: current, to: next, write });
       }
 
       if (!changes.length) {
         unchanged += 1;
         return;
       }
-      updates.push({ rowNo: r.rowNo, student, changes });
+      updates.push({ rowNo: r.rowNo, entity, changes });
     });
 
-    // Summary buckets, counted per change rather than per student.
-    const tally = { phone: 0, father: 0, inactive: 0, reactivated: 0, other: 0 };
+    // Summary buckets, counted per change rather than per row.
+    const counts = {};
     let changeCount = 0;
     updates.forEach((u) =>
       u.changes.forEach((c) => {
         changeCount += 1;
-        if (c.key === "parentPhone") tally.phone += 1;
-        else if (c.key === "fatherName") tally.father += 1;
-        else if (c.key === "status")
-          c.to === "inactive" ? (tally.inactive += 1) : (tally.reactivated += 1);
-        else tally.other += 1;
+        const bucket =
+          c.field.kind === "status"
+            ? c.to === "inactive"
+              ? "marked as inactive"
+              : "reactivated"
+            : c.field.bucket;
+        counts[bucket] = (counts[bucket] || 0) + 1;
       })
     );
 
-    return { updates, warnings, unchanged, tally, changeCount };
-  }, [rows, byId]);
+    return { updates, warnings, unchanged, counts, changeCount };
+  }, [sheetRows, byId, fields, config, classes]);
 
   const doUpdate = async () => {
     const { updates } = checked;
@@ -219,45 +313,54 @@ export default function BulkUpdateModal({
       // Only the fields that differ — untouched columns are never written.
       const payload = {};
       u.changes.forEach((c) => {
-        payload[c.docKey] = c.to;
+        Object.assign(
+          payload,
+          c.field.toPayload
+            ? c.field.toPayload(c.write, u.entity)
+            : { [c.field.docKey]: c.write }
+        );
       });
 
       try {
         await updateDoc(
-          doc(db, `schools/${schoolCode}/students/${u.student.id}`),
+          doc(db, `schools/${schoolCode}/${config.collection}/${u.entity.id}`),
           payload
         );
         done += 1;
       } catch (err) {
-        console.error(`Bulk update failed for ${u.student.id}:`, err);
+        console.error(`Bulk update failed for ${u.entity.id}:`, err);
         if (err.code === "permission-denied") {
-          setError("You don't have permission to update students.");
+          setError(
+            `You don't have permission to update ${config.collection}.`
+          );
           setUpdating(false);
           return;
         }
         failed += 1;
         setProgress({ done: done + failed, total: updates.length });
-        continue; // student write failed — don't sync a number that wasn't saved
+        continue; // the write failed — don't sync a number that wasn't saved
       }
 
-      // Keep the linked parent record's phone in step when the phone changed.
-      // The student doc is already saved, so a failure here is counted and
+      // Students only: keep the linked parent record's phone in step. The
+      // student doc is already saved, so a failure here is counted and
       // reported rather than failing the row. Students predating the paired
       // parent accounts have no parentId and simply have nothing to sync.
-      const phoneChange = u.changes.find((c) => c.key === "parentPhone");
-      if (phoneChange && u.student.parentId) {
+      const phoneChange = config.syncsParentPhone
+        ? u.changes.find((c) => c.field.key === "parentPhone")
+        : null;
+      if (phoneChange && u.entity.parentId) {
         if (parentDenied) {
           // Still unsynced, so it stays in the count — just don't re-ask.
           parentFailed += 1;
         } else {
           try {
             await updateDoc(
-              doc(db, `schools/${schoolCode}/parents/${u.student.parentId}`),
-              { phone: phoneChange.to }
+              doc(db, `schools/${schoolCode}/parents/${u.entity.parentId}`),
+              { phone: phoneChange.write }
             );
           } catch (parentErr) {
             console.error(
-              `Parent phone sync failed for ${u.student.parentId}:`,
+              `Parent phone sync failed for ${u.entity.parentId}:`,
               parentErr
             );
             parentFailed += 1;
@@ -278,20 +381,18 @@ export default function BulkUpdateModal({
         } couldn't be synced`
       );
 
+    const noun = `${config.singular}${done === 1 ? "" : "s"}`;
     onSuccess?.(
       issues.length
-        ? `${done} student${done === 1 ? "" : "s"} updated — ${issues.join(
-            ", "
-          )}. Please retry those.`
-        : `${done} student${done === 1 ? "" : "s"} updated successfully!`
+        ? `${done} ${noun} updated — ${issues.join(", ")}. Please retry those.`
+        : `${done} ${noun} updated successfully!`
     );
   };
 
   const pct = progress.total
     ? Math.round((progress.done / progress.total) * 100)
     : 0;
-  const noStudents = students.length === 0;
-  const { tally } = checked;
+  const noEntities = entities.length === 0;
 
   // Flatten the diff for display: one line per changed field.
   const diffLines = useMemo(() => {
@@ -300,34 +401,40 @@ export default function BulkUpdateModal({
       u.changes.forEach((c) =>
         out.push({
           rowNo: u.rowNo,
-          id: u.student.id,
-          name: u.student.fullName || u.student.id,
-          label: c.label,
+          id: u.entity.id,
+          name: config.nameOf(u.entity),
+          label: c.field.label,
           from: c.from,
           to: c.to,
         })
       )
     );
     return out;
-  }, [checked.updates]);
+  }, [checked.updates, config]);
 
   const shownDiffs = diffLines.slice(0, 20);
 
-  const summaryLines = tally
-    ? [
-        tally.phone && `${tally.phone} phone number change${tally.phone === 1 ? "" : "s"}`,
-        tally.father && `${tally.father} father name correction${tally.father === 1 ? "" : "s"}`,
-        tally.inactive && `${tally.inactive} marked as inactive`,
-        tally.reactivated && `${tally.reactivated} reactivated`,
-        tally.other && `${tally.other} other field update${tally.other === 1 ? "" : "s"}`,
-      ].filter(Boolean)
-    : [];
+  // Fixed order so the summary reads the same way every time.
+  const summaryLines = useMemo(() => {
+    const order = [];
+    fields.forEach((f) => {
+      if (f.kind !== "status" && !order.includes(f.bucket)) order.push(f.bucket);
+    });
+    const lines = order
+      .filter((b) => checked.counts[b])
+      .map((b) => `${checked.counts[b]} ${b}${checked.counts[b] === 1 ? "" : "s"}`);
+    if (checked.counts["marked as inactive"])
+      lines.push(`${checked.counts["marked as inactive"]} marked as inactive`);
+    if (checked.counts["reactivated"])
+      lines.push(`${checked.counts["reactivated"]} reactivated`);
+    return lines;
+  }, [checked.counts, fields]);
 
   return (
     <div className="modal-overlay" onClick={updating ? undefined : onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">Bulk Update Students</span>
+          <span className="modal-title">{config.title}</span>
           <button
             className="modal-close"
             onClick={onClose}
@@ -348,29 +455,30 @@ export default function BulkUpdateModal({
               <button
                 type="button"
                 className="btn-excel-import"
-                onClick={() => downloadBulkUpdateTemplate(students, schoolCode)}
-                disabled={noStudents}
+                onClick={() => config.downloadTemplate(entities, schoolCode)}
+                disabled={noEntities}
               >
-                📥 Download Current Roster
+                📥 Download Current {config.singular === "student" ? "Roster" : "List"}
               </button>
               <p className="page-subtitle" style={{ marginTop: 10 }}>
-                All {students.length} student{students.length === 1 ? "" : "s"},
-                pre-filled with their current values: Student ID · Roll No ·
-                Class · Full Name · Father Name · Parent Phone · Status. Edit
-                only the cells that need changing and upload the same file back.
+                All {entities.length} {config.singular}
+                {entities.length === 1 ? "" : "s"}, pre-filled with their
+                current values: {config.columnsHint}. Edit only the cells that
+                need changing and upload the same file back.
               </p>
               <p className="field-hint">
-                Don&apos;t edit the Student ID column — it&apos;s how each row
-                is matched. Set Status to <strong>inactive</strong> to mark a
-                student as withdrawn; their record and history are kept, never
-                deleted. A cell left blank means &quot;leave as-is&quot;.
+                Don&apos;t edit the {config.idLabel} column — it&apos;s how each
+                row is matched. Set Status to <strong>inactive</strong> to mark
+                a {config.singular} as {config.withdrawnWord}; their record and
+                history are kept, never deleted. A cell left blank means
+                &quot;leave as-is&quot;.
               </p>
-              {noStudents && (
+              {noEntities && (
                 <div
                   className="warn-banner"
                   style={{ margin: "10px 0 0", fontSize: 13 }}
                 >
-                  ⚠️ No students on the roster yet — nothing to update.
+                  ⚠️ No {config.singular}s on record yet — nothing to update.
                 </div>
               )}
             </div>
@@ -394,12 +502,12 @@ export default function BulkUpdateModal({
             </div>
 
             {/* Step 3 — Preview */}
-            {rows && (
+            {sheetRows && (
               <div className="import-step">
                 <div className="import-step-title">3 · Preview</div>
                 <p className="page-subtitle">
                   <strong>
-                    {checked.updates.length} student
+                    {checked.updates.length} {config.singular}
                     {checked.updates.length === 1 ? "" : "s"} will be updated
                   </strong>
                   {checked.changeCount
@@ -447,7 +555,7 @@ export default function BulkUpdateModal({
                     <thead>
                       <tr>
                         <th>Row</th>
-                        <th>Student</th>
+                        <th>{config.idLabel === "Student ID" ? "Student" : "Teacher"}</th>
                         <th>Field</th>
                         <th>Current</th>
                         <th>New</th>
@@ -479,7 +587,7 @@ export default function BulkUpdateModal({
             {updating && (
               <div className="import-step">
                 <div className="import-step-title">
-                  Updating students… {progress.done}/{progress.total}
+                  Updating {config.singular}s… {progress.done}/{progress.total}
                 </div>
                 <div className="progress-wrap">
                   <div className="progress-fill" style={{ width: `${pct}%` }} />
@@ -506,9 +614,10 @@ export default function BulkUpdateModal({
           >
             {updating
               ? `Updating… ${progress.done}/${progress.total}`
-              : `Update ${checked.updates.length} Student${
-                  checked.updates.length === 1 ? "" : "s"
-                }`}
+              : `Update ${checked.updates.length} ${
+                  config.singular.charAt(0).toUpperCase() +
+                  config.singular.slice(1)
+                }${checked.updates.length === 1 ? "" : "s"}`}
           </button>
         </div>
       </div>

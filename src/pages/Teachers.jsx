@@ -6,6 +6,7 @@ import AddTeacherModal from "../components/AddTeacherModal";
 import TeacherDetailModal from "../components/TeacherDetailModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportExcelModal from "../components/ImportExcelModal";
+import BulkUpdateModal from "../components/BulkUpdateModal";
 import { exportTeachers } from "../services/excelExport";
 import { useClasses, classSort } from "../services/classes";
 
@@ -31,6 +32,9 @@ export default function Teachers() {
   const [classFilter, setClassFilter] = useState("All Classes");
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showBulkUpdate, setShowBulkUpdate] = useState(false);
+  // Teachers who have left are kept on record but hidden by default.
+  const [statusFilter, setStatusFilter] = useState("Active");
   const [editTeacher, setEditTeacher] = useState(null);
   const [viewTeacher, setViewTeacher] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -130,6 +134,27 @@ export default function Teachers() {
     return ["All Classes", ...Array.from(set).sort(classSort)];
   }, [classes, teachers]);
 
+  // The bulk-update sheet is a snapshot of the raw stored values rather than
+  // the table's "—" placeholders, so a round-trip can't write a dash back into
+  // Firestore. nameKey records which field this doc actually keeps its name in.
+  const bulkUpdateRoster = useMemo(
+    () =>
+      teachers.map((t) => ({
+        id: t.id,
+        name: t.raw.fullName || t.raw.name || "",
+        nameKey: t.raw.fullName !== undefined ? "fullName" : "name",
+        subject: t.raw.subject || "",
+        classesAssigned: Array.isArray(t.raw.classesAssigned)
+          ? t.raw.classesAssigned
+          : t.raw.classesAssigned
+          ? [t.raw.classesAssigned]
+          : [],
+        phone: t.raw.phone || t.raw.phoneNumber || t.raw.contact || "",
+        status: String(t.raw.status || "active").toLowerCase(),
+      })),
+    [teachers]
+  );
+
   // Apply search + subject + class filters.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -140,9 +165,16 @@ export default function Teachers() {
       const matchesClass =
         classFilter === "All Classes" ||
         t.classesAssigned.includes(classFilter);
-      return matchesSearch && matchesSubject && matchesClass;
+      const matchesStatus =
+        statusFilter === "All" || t.status === statusFilter.toLowerCase();
+      return matchesSearch && matchesSubject && matchesClass && matchesStatus;
     });
-  }, [teachers, search, subject, classFilter]);
+  }, [teachers, search, subject, classFilter, statusFilter]);
+
+  const inactiveCount = useMemo(
+    () => teachers.filter((t) => t.status === "inactive").length,
+    [teachers]
+  );
 
   return (
     <div className="page">
@@ -160,6 +192,12 @@ export default function Teachers() {
             onClick={() => setShowImport(true)}
           >
             📤 Import Excel
+          </button>
+          <button
+            className="btn-excel-import"
+            onClick={() => setShowBulkUpdate(true)}
+          >
+            📝 Bulk Update Teachers
           </button>
           <button
             className="btn-excel-export"
@@ -235,6 +273,17 @@ export default function Teachers() {
             </option>
           ))}
         </select>
+        <select
+          className="filter-select"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          {["Active", "Inactive", "All"].map((s) => (
+            <option key={s} value={s}>
+              {s === "All" ? "All Statuses" : s}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Stats row */}
@@ -246,6 +295,14 @@ export default function Teachers() {
         <span>
           Showing: <strong>{filtered.length}</strong>
         </span>
+        {inactiveCount > 0 && (
+          <>
+            <span className="stats-sep">·</span>
+            <span>
+              Inactive: <strong>{inactiveCount}</strong>
+            </span>
+          </>
+        )}
       </div>
 
       {/* Table */}
@@ -333,6 +390,19 @@ export default function Teachers() {
           teacher={editTeacher || undefined}
           onClose={closeModal}
           onSuccess={handleSuccess}
+        />
+      )}
+
+      {showBulkUpdate && (
+        <BulkUpdateModal
+          type="teachers"
+          schoolCode={schoolCode}
+          rows={bulkUpdateRoster}
+          onClose={() => setShowBulkUpdate(false)}
+          onSuccess={(msg) => {
+            setShowBulkUpdate(false);
+            handleSuccess(msg);
+          }}
         />
       )}
 

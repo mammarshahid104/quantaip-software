@@ -373,8 +373,9 @@ export default function Students() {
 
       {showBulkUpdate && (
         <BulkUpdateModal
+          type="students"
           schoolCode={schoolCode}
-          students={bulkUpdateRoster}
+          rows={bulkUpdateRoster}
           onClose={() => setShowBulkUpdate(false)}
           onSuccess={(msg) => {
             setShowBulkUpdate(false);
